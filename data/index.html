@@ -169,8 +169,8 @@
                             <tr>
                                 <th>Enabled</th>
                                 <th>Name</th>
-                                <th>Days</th>
-                                <th>Time</th>
+                                <th>Type</th>
+                                <th>Trigger</th>
                                 <th>Action</th>
                                 <th>Target</th>
                                 <th>Actions</th>
@@ -198,21 +198,57 @@
                                 <input type="text" id="schedule-name" required>
                             </div>
                             <div class="form-group">
-                                <label>Days</label>
-                                <div class="days-selector">
-                                    <label><input type="checkbox" data-day="0"> Sun</label>
-                                    <label><input type="checkbox" data-day="1"> Mon</label>
-                                    <label><input type="checkbox" data-day="2"> Tue</label>
-                                    <label><input type="checkbox" data-day="3"> Wed</label>
-                                    <label><input type="checkbox" data-day="4"> Thu</label>
-                                    <label><input type="checkbox" data-day="5"> Fri</label>
-                                    <label><input type="checkbox" data-day="6"> Sat</label>
+                                <label for="schedule-trigger-type">Trigger Type</label>
+                                <select id="schedule-trigger-type" required>
+                                    <option value="0">Time-based</option>
+                                    <option value="1">Input-based</option>
+                                    <option value="2">Combined (Time + Input)</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Time-based trigger fields -->
+                            <div id="time-trigger-section">
+                                <div class="form-group">
+                                    <label>Days</label>
+                                    <div class="days-selector">
+                                        <label><input type="checkbox" data-day="0"> Sun</label>
+                                        <label><input type="checkbox" data-day="1"> Mon</label>
+                                        <label><input type="checkbox" data-day="2"> Tue</label>
+                                        <label><input type="checkbox" data-day="3"> Wed</label>
+                                        <label><input type="checkbox" data-day="4"> Thu</label>
+                                        <label><input type="checkbox" data-day="5"> Fri</label>
+                                        <label><input type="checkbox" data-day="6"> Sat</label>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="schedule-time">Time</label>
+                                    <input type="time" id="schedule-time" required>
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label for="schedule-time">Time</label>
-                                <input type="time" id="schedule-time" required>
+                            
+                            <!-- Input-based trigger fields -->
+                            <div id="input-trigger-section">
+                                <div class="form-group">
+                                    <label>Select Digital Inputs</label>
+                                    <div id="input-checkboxes" class="checkbox-grid">
+                                        <!-- Will be filled by JavaScript -->
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Select Direct Inputs</label>
+                                    <div id="ht-input-checkboxes" class="checkbox-grid">
+                                        <!-- Will be filled by JavaScript -->
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="schedule-input-logic">Logic</label>
+                                    <select id="schedule-input-logic">
+                                        <option value="0">AND (All conditions must be met)</option>
+                                        <option value="1">OR (Any condition triggers)</option>
+                                    </select>
+                                </div>
                             </div>
+                            
                             <div class="form-group">
                                 <label for="schedule-action">Action</label>
                                 <select id="schedule-action" required>

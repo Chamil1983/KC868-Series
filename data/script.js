@@ -259,8 +259,6 @@ function setupDataFreshnessMonitor() {
     }, 3000); // Check every 3 seconds
 }
 
-
-
 // Navigation setup
 function setupNavigation() {
     console.log(`Found ${navLinks.length} navigation links`);
@@ -941,8 +939,6 @@ function handleStatusUpdate(data) {
     systemData = data;
 }
 
-
-
 // Initialize relay controls
 function initRelayControls() {
     const relaysGrid = document.getElementById('relays-grid');
@@ -1079,17 +1075,23 @@ function createVisualAnalogGrid() {
     }
 }
 
-// Initialize schedules UI
+// Initialize Schedule UI - Fixed to properly show the Add Schedule button and handle events
 function initScheduleUI() {
-    // Load schedules
+    console.log("Initializing Schedule UI");
+    
+    // Load schedules from server
     fetchSchedules();
     
-    // Setup add button
+    // Setup add schedule button - Make sure this works correctly
     const addScheduleBtn = document.getElementById('add-schedule');
     if (addScheduleBtn) {
+        console.log("Add schedule button found, adding event listener");
         addScheduleBtn.addEventListener('click', function() {
+            console.log("Add schedule button clicked");
             openScheduleModal();
         });
+    } else {
+        console.error("Add schedule button not found!");
     }
     
     // Setup modal close buttons
@@ -1105,6 +1107,14 @@ function initScheduleUI() {
         scheduleForm.addEventListener('submit', function(e) {
             e.preventDefault();
             saveSchedule();
+        });
+    }
+    
+    // Setup trigger type change
+    const triggerTypeSelect = document.getElementById('schedule-trigger-type');
+    if (triggerTypeSelect) {
+        triggerTypeSelect.addEventListener('change', function() {
+            updateVisibleTriggerSections(this.value);
         });
     }
     
@@ -1125,9 +1135,10 @@ function initScheduleUI() {
         });
     }
     
-    // Fill relay options
+    // Fill relay options for single target
     const targetSelect = document.getElementById('schedule-target-id');
     if (targetSelect) {
+        targetSelect.innerHTML = '';
         for (let i = 0; i < 16; i++) {
             const option = document.createElement('option');
             option.value = i;
@@ -1136,9 +1147,10 @@ function initScheduleUI() {
         }
     }
     
-    // Fill relay checkboxes
+    // Fill relay checkboxes for multiple targets
     const checkboxGrid = document.getElementById('relay-checkboxes');
     if (checkboxGrid) {
+        checkboxGrid.innerHTML = '';
         for (let i = 0; i < 16; i++) {
             const label = document.createElement('label');
             const checkbox = document.createElement('input');
@@ -1149,7 +1161,586 @@ function initScheduleUI() {
             checkboxGrid.appendChild(label);
         }
     }
+    
+    // Fill input checkboxes with state selects
+    const inputCheckboxes = document.getElementById('input-checkboxes');
+    if (inputCheckboxes) {
+        inputCheckboxes.innerHTML = '';
+        for (let i = 0; i < 16; i++) {
+            const container = document.createElement('div');
+            container.className = 'input-container';
+            
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.setAttribute('data-input', i);
+            
+            // Create state select that appears when checked
+            const stateSelect = document.createElement('select');
+            stateSelect.className = 'input-state-select';
+            stateSelect.style.display = 'none'; // Initially hidden
+            stateSelect.innerHTML = `
+                <option value="0">LOW</option>
+                <option value="1">HIGH</option>
+            `;
+            
+            // Show/hide state select when checkbox changes
+            checkbox.addEventListener('change', function() {
+                stateSelect.style.display = this.checked ? 'inline-block' : 'none';
+            });
+            
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(` Input ${i+1} `));
+            container.appendChild(label);
+            container.appendChild(stateSelect);
+            
+            inputCheckboxes.appendChild(container);
+        }
+    }
+    
+    // Fill HT input checkboxes with state selects
+    const htInputCheckboxes = document.getElementById('ht-input-checkboxes');
+    if (htInputCheckboxes) {
+        htInputCheckboxes.innerHTML = '';
+        for (let i = 0; i < 3; i++) {
+            const container = document.createElement('div');
+            container.className = 'input-container';
+            
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.setAttribute('data-input', i + 16); // HT inputs are at bits 16-18
+            
+            // Create state select that appears when checked
+            const stateSelect = document.createElement('select');
+            stateSelect.className = 'input-state-select';
+            stateSelect.style.display = 'none'; // Initially hidden
+            stateSelect.innerHTML = `
+                <option value="0">LOW</option>
+                <option value="1">HIGH</option>
+            `;
+            
+            // Show/hide state select when checkbox changes
+            checkbox.addEventListener('change', function() {
+                stateSelect.style.display = this.checked ? 'inline-block' : 'none';
+            });
+            
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(` HT${i+1} `));
+            container.appendChild(label);
+            container.appendChild(stateSelect);
+            
+            htInputCheckboxes.appendChild(container);
+        }
+    }
 }
+
+// Fetch schedules from the server
+function fetchSchedules() {
+    fetch('/api/schedules')
+        .then(response => response.json())
+        .then(data => {
+            renderSchedulesTable(data.schedules);
+        })
+        .catch(error => {
+            console.error('Error fetching schedules:', error);
+            showToast('Failed to load schedules', 'error');
+        });
+}
+
+// Enhanced renderSchedulesTable function
+function renderSchedulesTable(schedules) {
+    const tableBody = document.querySelector('#schedules-table tbody');
+    if (!tableBody) return;
+    
+    tableBody.innerHTML = '';
+    
+    if (!schedules || schedules.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="7" class="text-center">No schedules configured</td>';
+        tableBody.appendChild(row);
+        return;
+    }
+    
+    schedules.forEach(schedule => {
+        const row = document.createElement('tr');
+        
+        // Format trigger based on type
+        let triggerText = '';
+        let triggerTypeText = '';
+        
+        // Determine trigger type
+        switch(schedule.triggerType) {
+            case 0:
+                triggerTypeText = 'Time';
+                
+                // Format days for time-based trigger
+                const days = [];
+                if (schedule.days & 1) days.push('Sun');
+                if (schedule.days & 2) days.push('Mon');
+                if (schedule.days & 4) days.push('Tue');
+                if (schedule.days & 8) days.push('Wed');
+                if (schedule.days & 16) days.push('Thu');
+                if (schedule.days & 32) days.push('Fri');
+                if (schedule.days & 64) days.push('Sat');
+                
+                // Format time
+                const hour = schedule.hour.toString().padStart(2, '0');
+                const minute = schedule.minute.toString().padStart(2, '0');
+                
+                triggerText = `${days.join(', ')} at ${hour}:${minute}`;
+                break;
+                
+            case 1:
+                triggerTypeText = 'Input';
+                triggerText = formatInputTriggerText(schedule.inputMask, schedule.inputStates, schedule.logic);
+                break;
+                
+            case 2:
+                triggerTypeText = 'Combined';
+                // Format time part
+                const combinedDays = [];
+                if (schedule.days & 1) combinedDays.push('Sun');
+                if (schedule.days & 2) combinedDays.push('Mon');
+                if (schedule.days & 4) combinedDays.push('Tue');
+                if (schedule.days & 8) combinedDays.push('Wed');
+                if (schedule.days & 16) combinedDays.push('Thu');
+                if (schedule.days & 32) combinedDays.push('Fri');
+                if (schedule.days & 64) combinedDays.push('Sat');
+                
+                const hourStr = schedule.hour.toString().padStart(2, '0');
+                const minuteStr = schedule.minute.toString().padStart(2, '0');
+                
+                const timePart = `${combinedDays.join(', ')} at ${hourStr}:${minuteStr}`;
+                
+                // Format input part
+                const inputPart = formatInputTriggerText(schedule.inputMask, schedule.inputStates, schedule.logic);
+                
+                triggerText = `${timePart} AND ${inputPart}`;
+                break;
+        }
+        
+        // Format action
+        const actions = ['Turn OFF', 'Turn ON', 'Toggle'];
+        
+        // Format target
+        let targetText = '';
+        if (schedule.targetType === 0) {
+            targetText = `Relay ${schedule.targetId + 1}`;
+        } else {
+            // Count the number of relays
+            let relayCount = 0;
+            let relayList = [];
+            for (let i = 0; i < 16; i++) {
+                if (schedule.targetId & (1 << i)) {
+                    relayCount++;
+                    relayList.push(i + 1);
+                }
+            }
+            targetText = `${relayCount} Relays (${relayList.join(', ')})`;
+        }
+        
+        row.innerHTML = `
+            <td><input type="checkbox" ${schedule.enabled ? 'checked' : ''} onchange="toggleSchedule(${schedule.id}, this.checked)"></td>
+            <td>${schedule.name}</td>
+            <td><span class="trigger-type trigger-type-${schedule.triggerType}">${triggerTypeText}</span></td>
+            <td>${triggerText}</td>
+            <td>${actions[schedule.action]}</td>
+            <td>${targetText}</td>
+            <td>
+                <div class="action-btns">
+                    <button class="btn btn-secondary btn-sm" onclick="editSchedule(${schedule.id})"><i class="fa fa-edit"></i></button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteSchedule(${schedule.id})"><i class="fa fa-trash"></i></button>
+                </div>
+            </td>
+        `;
+        
+        tableBody.appendChild(row);
+    });
+}
+
+// Helper function to format input trigger text
+function formatInputTriggerText(inputMask, inputStates, logic) {
+    if (!inputMask) return 'No inputs selected';
+    
+    const selectedInputs = [];
+    
+    // Check digital inputs (bits 0-15)
+    for (let i = 0; i < 16; i++) {
+        if (inputMask & (1 << i)) {
+            const state = (inputStates & (1 << i)) ? 'HIGH' : 'LOW';
+            selectedInputs.push(`Input ${i+1} = ${state}`);
+        }
+    }
+    
+    // Check HT inputs (bits 16-18)
+    for (let i = 0; i < 3; i++) {
+        const bitPos = i + 16;
+        if (inputMask & (1 << bitPos)) {
+            const state = (inputStates & (1 << bitPos)) ? 'HIGH' : 'LOW';
+            selectedInputs.push(`HT${i+1} = ${state}`);
+        }
+    }
+    
+    if (selectedInputs.length === 0) return 'No inputs selected';
+    
+    // If more than one input, include the logic operator
+    if (selectedInputs.length > 1) {
+        const operator = logic === 0 ? 'AND' : 'OR';
+        return selectedInputs.join(` ${operator} `);
+    } else {
+        return selectedInputs[0];
+    }
+}
+
+// Enhanced open schedule modal function
+function openScheduleModal(scheduleId = null) {
+    console.log("Opening schedule modal, id:", scheduleId);
+    const modal = document.getElementById('schedule-modal');
+    if (!modal) {
+        console.error("Schedule modal not found!");
+        return;
+    }
+    
+    modal.style.display = 'block';
+    
+    // Reset form
+    document.getElementById('schedule-form').reset();
+    document.getElementById('schedule-id').value = '';
+    
+    // Reset day checkboxes
+    document.querySelectorAll('.days-selector input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // Reset input checkboxes if they exist
+    document.querySelectorAll('#input-checkboxes input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+        // Reset the state select
+        const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
+        if (stateSelect) stateSelect.value = '0';
+    });
+    
+    // Reset HT input checkboxes if they exist
+    document.querySelectorAll('#ht-input-checkboxes input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+        // Reset the state select
+        const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
+        if (stateSelect) stateSelect.value = '0';
+    });
+    
+    // Reset multiple targets
+    document.querySelectorAll('#relay-checkboxes input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // Show time-based trigger by default and hide input-based
+    document.getElementById('time-trigger-section').style.display = 'block';
+    document.getElementById('input-trigger-section').style.display = 'none';
+    
+    // Show single target by default
+    document.getElementById('single-target').style.display = 'block';
+    document.getElementById('multiple-targets').style.display = 'none';
+    
+    if (scheduleId !== null) {
+        // Load schedule data
+        fetch(`/api/schedules?id=${scheduleId}`)
+            .then(response => response.json())
+            .then(data => {
+                const schedule = data.schedule;
+                
+                document.getElementById('schedule-id').value = schedule.id;
+                document.getElementById('schedule-enabled').checked = schedule.enabled;
+                document.getElementById('schedule-name').value = schedule.name;
+                document.getElementById('schedule-trigger-type').value = schedule.triggerType;
+                
+                // Update visible sections based on trigger type
+                updateVisibleTriggerSections(schedule.triggerType);
+                
+                // Set time-based fields
+                if (schedule.triggerType === 0 || schedule.triggerType === 2) {
+                    // Set days
+                    for (let i = 0; i < 7; i++) {
+                        const checkbox = document.querySelector(`.days-selector input[data-day="${i}"]`);
+                        if (checkbox) {
+                            checkbox.checked = !!(schedule.days & (1 << i));
+                        }
+                    }
+                    
+                    // Set time
+                    const hour = schedule.hour.toString().padStart(2, '0');
+                    const minute = schedule.minute.toString().padStart(2, '0');
+                    document.getElementById('schedule-time').value = `${hour}:${minute}`;
+                }
+                
+                // Set input-based fields
+                if (schedule.triggerType === 1 || schedule.triggerType === 2) {
+                    // Set input logic
+                    document.getElementById('schedule-input-logic').value = schedule.logic;
+                    
+                    // Set digital input checkboxes
+                    for (let i = 0; i < 16; i++) {
+                        const checkbox = document.querySelector(`#input-checkboxes input[data-input="${i}"]`);
+                        if (checkbox) {
+                            const isChecked = !!(schedule.inputMask & (1 << i));
+                            checkbox.checked = isChecked;
+                            
+                            // Set the state
+                            const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
+                            if (stateSelect) {
+                                stateSelect.value = (schedule.inputStates & (1 << i)) ? '1' : '0';
+                                stateSelect.style.display = isChecked ? 'inline-block' : 'none';
+                            }
+                        }
+                    }
+                    
+                    // Set HT input checkboxes
+                    for (let i = 0; i < 3; i++) {
+                        const bitPos = i + 16; // HT inputs are stored at bits 16-18
+                        const checkbox = document.querySelector(`#ht-input-checkboxes input[data-input="${bitPos}"]`);
+                        if (checkbox) {
+                            const isChecked = !!(schedule.inputMask & (1 << bitPos));
+                            checkbox.checked = isChecked;
+                            
+                            // Set the state
+                            const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
+                            if (stateSelect) {
+                                stateSelect.value = (schedule.inputStates & (1 << bitPos)) ? '1' : '0';
+                                stateSelect.style.display = isChecked ? 'inline-block' : 'none';
+                            }
+                        }
+                    }
+                }
+                
+                // Set common fields
+                document.getElementById('schedule-action').value = schedule.action;
+                document.getElementById('schedule-target-type').value = schedule.targetType;
+                
+                if (schedule.targetType === 0) {
+                    // Single target
+                    document.getElementById('single-target').style.display = 'block';
+                    document.getElementById('multiple-targets').style.display = 'none';
+                    document.getElementById('schedule-target-id').value = schedule.targetId;
+                } else {
+                    // Multiple targets
+                    document.getElementById('single-target').style.display = 'none';
+                    document.getElementById('multiple-targets').style.display = 'block';
+                    
+                    // Set checkboxes
+                    for (let i = 0; i < 16; i++) {
+                        const checkbox = document.querySelector(`#relay-checkboxes input[data-relay="${i}"]`);
+                        if (checkbox) {
+                            checkbox.checked = !!(schedule.targetId & (1 << i));
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error loading schedule:', error);
+                showToast('Failed to load schedule details', 'error');
+            });
+    }
+}
+
+// Function to update visible sections based on trigger type
+function updateVisibleTriggerSections(triggerType) {
+    const timeSection = document.getElementById('time-trigger-section');
+    const inputSection = document.getElementById('input-trigger-section');
+    
+    switch (parseInt(triggerType)) {
+        case 0: // Time-based
+            timeSection.style.display = 'block';
+            inputSection.style.display = 'none';
+            break;
+        case 1: // Input-based
+            timeSection.style.display = 'none';
+            inputSection.style.display = 'block';
+            break;
+        case 2: // Combined
+            timeSection.style.display = 'block';
+            inputSection.style.display = 'block';
+            break;
+    }
+}
+
+// Enhanced save schedule function
+function saveSchedule() {
+    const scheduleId = document.getElementById('schedule-id').value;
+    const isNew = !scheduleId;
+    
+    // Get trigger type
+    const triggerType = parseInt(document.getElementById('schedule-trigger-type').value);
+    
+    // Initialize time and input fields
+    let days = 0;
+    let hour = 0;
+    let minute = 0;
+    let inputMask = 0;
+    let inputStates = 0;
+    let logic = 0;
+    
+    // Process time-based fields if applicable
+    if (triggerType === 0 || triggerType === 2) {
+        // Calculate days bitmask
+        document.querySelectorAll('.days-selector input[type="checkbox"]:checked').forEach(checkbox => {
+            const day = parseInt(checkbox.getAttribute('data-day'));
+            days |= (1 << day);
+        });
+        
+        // Get time
+        const timeValue = document.getElementById('schedule-time').value;
+        const timeParts = timeValue.split(':').map(Number);
+        if (timeParts.length === 2) {
+            hour = timeParts[0];
+            minute = timeParts[1];
+        }
+    }
+    
+    // Process input-based fields if applicable
+    if (triggerType === 1 || triggerType === 2) {
+        // Get logic (AND/OR)
+        logic = parseInt(document.getElementById('schedule-input-logic').value);
+        
+        // Process digital inputs
+        document.querySelectorAll('#input-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
+            const inputId = parseInt(checkbox.getAttribute('data-input'));
+            inputMask |= (1 << inputId);
+            
+            // Get desired state
+            const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
+            if (stateSelect && stateSelect.value === '1') {
+                inputStates |= (1 << inputId); // Set to HIGH
+            }
+        });
+        
+        // Process HT inputs
+        document.querySelectorAll('#ht-input-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
+            const inputId = parseInt(checkbox.getAttribute('data-input'));
+            inputMask |= (1 << inputId);
+            
+            // Get desired state
+            const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
+            if (stateSelect && stateSelect.value === '1') {
+                inputStates |= (1 << inputId); // Set to HIGH
+            }
+        });
+    }
+    
+    // Get target
+    const targetType = parseInt(document.getElementById('schedule-target-type').value);
+    let targetId = 0;
+    
+    if (targetType === 0) {
+        // Single relay
+        targetId = parseInt(document.getElementById('schedule-target-id').value);
+    } else {
+        // Multiple relays - calculate bitmask
+        document.querySelectorAll('#relay-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
+            const relay = parseInt(checkbox.getAttribute('data-relay'));
+            targetId |= (1 << relay);
+        });
+    }
+    
+    // Create schedule object
+    const schedule = {
+        id: scheduleId ? parseInt(scheduleId) : null,
+        enabled: document.getElementById('schedule-enabled').checked,
+        name: document.getElementById('schedule-name').value,
+        triggerType: triggerType,
+        days: days,
+        hour: hour,
+        minute: minute,
+        inputMask: inputMask,
+        inputStates: inputStates,
+        logic: logic,
+        action: parseInt(document.getElementById('schedule-action').value),
+        targetType: targetType,
+        targetId: targetId
+    };
+    
+    // Save to server
+    fetch('/api/schedules', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ schedule: schedule })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            document.getElementById('schedule-modal').style.display = 'none';
+            showToast(`Schedule ${isNew ? 'created' : 'updated'} successfully`);
+            fetchSchedules();
+        } else {
+            showToast(`Failed to ${isNew ? 'create' : 'update'} schedule: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving schedule:', error);
+        showToast(`Network error. Could not ${isNew ? 'create' : 'update'} schedule`, 'error');
+    });
+}
+
+// Global functions for schedule management
+window.editSchedule = function(scheduleId) {
+    openScheduleModal(scheduleId);
+};
+
+window.deleteSchedule = function(scheduleId) {
+    if (confirm('Are you sure you want to delete this schedule?')) {
+        fetch(`/api/schedules`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+                id: scheduleId,
+                delete: true
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showToast('Schedule deleted successfully');
+                fetchSchedules();
+            } else {
+                showToast(`Failed to delete schedule: ${data.message}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting schedule:', error);
+            showToast('Network error. Could not delete schedule', 'error');
+        });
+    }
+};
+
+window.toggleSchedule = function(scheduleId, enabled) {
+    fetch('/api/schedules', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+            id: scheduleId,
+            enabled: enabled
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast(`Schedule ${enabled ? 'enabled' : 'disabled'}`);
+        } else {
+            showToast(`Failed to update schedule: ${data.message}`, 'error');
+            fetchSchedules(); // Refresh to get actual state
+        }
+    })
+    .catch(error => {
+        console.error('Error toggling schedule:', error);
+        showToast('Network error. Could not update schedule', 'error');
+        fetchSchedules(); // Refresh to get actual state
+    });
+};
 
 // Initialize analog triggers UI
 function initTriggerUI() {
@@ -1200,6 +1791,7 @@ function initTriggerUI() {
     // Fill relay options
     const targetSelect = document.getElementById('trigger-target-id');
     if (targetSelect) {
+        targetSelect.innerHTML = '';
         for (let i = 0; i < 16; i++) {
             const option = document.createElement('option');
             option.value = i;
@@ -1211,6 +1803,7 @@ function initTriggerUI() {
     // Fill relay checkboxes
     const checkboxGrid = document.getElementById('trigger-relay-checkboxes');
     if (checkboxGrid) {
+        checkboxGrid.innerHTML = '';
         for (let i = 0; i < 16; i++) {
             const label = document.createElement('label');
             const checkbox = document.createElement('input');
@@ -1231,6 +1824,295 @@ function initTriggerUI() {
         });
     }
 }
+
+// Initialize input controls
+function initInputControls() {
+    // Create digital input displays
+    const digitalInputsGrid = document.getElementById('digital-inputs-grid');
+    if (digitalInputsGrid) {
+        digitalInputsGrid.innerHTML = '';
+        for (let i = 0; i < 16; i++) {
+            const inputItem = document.createElement('div');
+            inputItem.className = 'input-item';
+            inputItem.setAttribute('data-input', i);
+            inputItem.innerHTML = `
+                Input ${i+1}
+                <div class="input-state"></div>
+            `;
+            digitalInputsGrid.appendChild(inputItem);
+        }
+    }
+    
+    // Create direct input displays (HT1-HT3)
+    const directInputsGrid = document.getElementById('direct-inputs-grid');
+    if (directInputsGrid) {
+        directInputsGrid.innerHTML = '';
+        for (let i = 0; i < 3; i++) {
+            const inputItem = document.createElement('div');
+            inputItem.className = 'input-item';
+            inputItem.setAttribute('data-input', 'ht' + i);
+            inputItem.innerHTML = `
+                HT${i+1}
+                <div class="input-state"></div>
+            `;
+            directInputsGrid.appendChild(inputItem);
+        }
+    }
+    
+    // Create visual input grid for graphical representation
+    createVisualInputGrid();
+    
+    // Create visual analog grid
+    createVisualAnalogGrid();
+}
+
+// Fetch analog triggers from the server
+function fetchAnalogTriggers() {
+    fetch('/api/analog-triggers')
+        .then(response => response.json())
+        .then(data => {
+            renderTriggersTable(data.triggers);
+        })
+        .catch(error => {
+            console.error('Error fetching analog triggers:', error);
+            showToast('Failed to load analog triggers', 'error');
+        });
+}
+
+// Render triggers table
+function renderTriggersTable(triggers) {
+    const tableBody = document.querySelector('#triggers-table tbody');
+    if (!tableBody) return;
+    
+    tableBody.innerHTML = '';
+    
+    if (!triggers || triggers.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="8" class="text-center">No triggers configured</td>';
+        tableBody.appendChild(row);
+        return;
+    }
+    
+    triggers.forEach(trigger => {
+        const row = document.createElement('tr');
+        
+        // Format input
+        const inputs = ['A1', 'A2', 'A3', 'A4'];
+        
+        // Format condition
+        const conditions = ['Above', 'Below', 'Equal to'];
+        
+        // Format action
+        const actions = ['Turn OFF', 'Turn ON', 'Toggle'];
+        
+        // Format target
+        let targetText = '';
+        if (trigger.targetType === 0) {
+            targetText = `Relay ${trigger.targetId + 1}`;
+        } else {
+            targetText = 'Multiple Relays';
+        }
+        
+        row.innerHTML = `
+            <td><input type="checkbox" ${trigger.enabled ? 'checked' : ''} onchange="toggleTrigger(${trigger.id}, this.checked)"></td>
+            <td>${trigger.name}</td>
+            <td>${inputs[trigger.analogInput]}</td>
+            <td>${conditions[trigger.condition]}</td>
+            <td>${trigger.threshold}</td>
+            <td>${actions[trigger.action]}</td>
+            <td>${targetText}</td>
+            <td>
+                <div class="action-btns">
+                    <button class="btn btn-secondary btn-sm" onclick="editTrigger(${trigger.id})"><i class="fa fa-edit"></i></button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteTrigger(${trigger.id})"><i class="fa fa-trash"></i></button>
+                </div>
+            </td>
+        `;
+        
+        tableBody.appendChild(row);
+    });
+}
+
+// Open trigger modal
+function openTriggerModal(triggerId = null) {
+    const modal = document.getElementById('trigger-modal');
+    if (!modal) return;
+    
+    modal.style.display = 'block';
+    
+    // Reset form
+    document.getElementById('trigger-form').reset();
+    document.getElementById('trigger-id').value = '';
+    document.getElementById('threshold-value').textContent = '2048';
+    
+    // Reset multiple targets
+    document.querySelectorAll('#trigger-relay-checkboxes input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // Show single target by default
+    document.getElementById('trigger-single-target').style.display = 'block';
+    document.getElementById('trigger-multiple-targets').style.display = 'none';
+    
+    if (triggerId !== null) {
+        // Load trigger data
+        fetch(`/api/analog-triggers?id=${triggerId}`)
+            .then(response => response.json())
+            .then(data => {
+                const trigger = data.trigger;
+                
+                document.getElementById('trigger-id').value = trigger.id;
+                document.getElementById('trigger-enabled').checked = trigger.enabled;
+                document.getElementById('trigger-name').value = trigger.name;
+                document.getElementById('trigger-input').value = trigger.analogInput;
+                document.getElementById('trigger-condition').value = trigger.condition;
+                document.getElementById('trigger-threshold').value = trigger.threshold;
+                document.getElementById('threshold-value').textContent = trigger.threshold;
+                document.getElementById('trigger-action').value = trigger.action;
+                document.getElementById('trigger-target-type').value = trigger.targetType;
+                
+                if (trigger.targetType === 0) {
+                    // Single target
+                    document.getElementById('trigger-single-target').style.display = 'block';
+                    document.getElementById('trigger-multiple-targets').style.display = 'none';
+                    document.getElementById('trigger-target-id').value = trigger.targetId;
+                } else {
+                    // Multiple targets
+                    document.getElementById('trigger-single-target').style.display = 'none';
+                    document.getElementById('trigger-multiple-targets').style.display = 'block';
+                    
+                    // Set checkboxes
+                    for (let i = 0; i < 16; i++) {
+                        const checkbox = document.querySelector(`#trigger-relay-checkboxes input[data-relay="${i}"]`);
+                        if (checkbox) {
+                            checkbox.checked = !!(trigger.targetId & (1 << i));
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error loading trigger:', error);
+                showToast('Failed to load trigger details', 'error');
+            });
+    }
+}
+
+// Save trigger
+function saveTrigger() {
+    const triggerId = document.getElementById('trigger-id').value;
+    const isNew = !triggerId;
+    
+    // Get target
+    const targetType = parseInt(document.getElementById('trigger-target-type').value);
+    let targetId = 0;
+    
+    if (targetType === 0) {
+        // Single relay
+        targetId = parseInt(document.getElementById('trigger-target-id').value);
+    } else {
+        // Multiple relays - calculate bitmask
+        document.querySelectorAll('#trigger-relay-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
+            const relay = parseInt(checkbox.getAttribute('data-relay'));
+            targetId |= (1 << relay);
+        });
+    }
+    
+    // Create trigger object
+    const trigger = {
+        id: triggerId ? parseInt(triggerId) : null,
+        enabled: document.getElementById('trigger-enabled').checked,
+        name: document.getElementById('trigger-name').value,
+        analogInput: parseInt(document.getElementById('trigger-input').value),
+        condition: parseInt(document.getElementById('trigger-condition').value),
+        threshold: parseInt(document.getElementById('trigger-threshold').value),
+        action: parseInt(document.getElementById('trigger-action').value),
+        targetType: targetType,
+        targetId: targetId
+    };
+    
+    // Save to server
+    fetch('/api/analog-triggers', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ trigger: trigger })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            document.getElementById('trigger-modal').style.display = 'none';
+            showToast(`Trigger ${isNew ? 'created' : 'updated'} successfully`);
+            fetchAnalogTriggers();
+        } else {
+            showToast(`Failed to ${isNew ? 'create' : 'update'} trigger: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving trigger:', error);
+        showToast(`Network error. Could not ${isNew ? 'create' : 'update'} trigger`, 'error');
+    });
+}
+
+// Global functions for trigger management
+window.editTrigger = function(triggerId) {
+    openTriggerModal(triggerId);
+};
+
+window.deleteTrigger = function(triggerId) {
+    if (confirm('Are you sure you want to delete this trigger?')) {
+        fetch(`/api/analog-triggers`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+                id: triggerId,
+                delete: true
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showToast('Trigger deleted successfully');
+                fetchAnalogTriggers();
+            } else {
+                showToast(`Failed to delete trigger: ${data.message}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting trigger:', error);
+            showToast('Network error. Could not delete trigger', 'error');
+        });
+    }
+};
+
+window.toggleTrigger = function(triggerId, enabled) {
+    fetch('/api/analog-triggers', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+            id: triggerId,
+            enabled: enabled
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast(`Trigger ${enabled ? 'enabled' : 'disabled'}`);
+        } else {
+            showToast(`Failed to update trigger: ${data.message}`, 'error');
+            fetchAnalogTriggers(); // Refresh to get actual state
+        }
+    })
+    .catch(error => {
+        console.error('Error toggling trigger:', error);
+        showToast('Network error. Could not update trigger', 'error');
+        fetchAnalogTriggers(); // Refresh to get actual state
+    });
+};
 
 // Initialize communication UI
 function initCommunicationUI() {
@@ -1679,7 +2561,7 @@ function updateAnalogVisualizations(analogData) {
     if (!analogData) return;
     
     analogData.forEach((input, index) => {
-        const percentage = input.percentage || Math.round((input.value / 4095) * 100);
+        const percentage = input.percentage || 0;
         
         // Update bar
         const bar = document.getElementById(`analog-bar-${index}`);
@@ -1722,7 +2604,6 @@ function updateRelayState(id, state) {
     }
 }
 
-// Improved input state visualization
 // Improved input state visualization
 function updateInputState(id, state) {
     // Update status indicator in list
@@ -1801,11 +2682,13 @@ function updateDirectInputState(id, state) {
     }
 }
 
-
 // Update analog value
 function updateAnalogValue(id, value) {
-    // Get percentage
-    const percentage = Math.round((value / 4095) * 100);
+    // Get voltage and percentage from system data
+    const voltage = systemData.analog && systemData.analog[id] ? 
+                   systemData.analog[id].voltage : 0;
+    const percentage = systemData.analog && systemData.analog[id] ? 
+                      systemData.analog[id].percentage : 0;
     
     // Update fill bar
     const fillBar = document.querySelector(`.analog-card[data-input="${id}"] .analog-fill`);
@@ -1813,10 +2696,10 @@ function updateAnalogValue(id, value) {
         fillBar.style.width = `${percentage}%`;
     }
     
-    // Update value display
+    // Update value display - show both raw value and voltage
     const valueDisplay = document.querySelector(`.analog-card[data-input="${id}"] .analog-value`);
     if (valueDisplay) {
-        valueDisplay.textContent = value;
+        valueDisplay.textContent = `${value} (${voltage.toFixed(2)}V)`;
     }
     
     // Update percentage display
@@ -2005,18 +2888,17 @@ function refreshSystemStatus() {
                 if (analogInputsGrid) {
                     analogInputsGrid.innerHTML = '';
                     data.analog.forEach(input => {
-                        const percentage = input.percentage || Math.round((input.value / 4095) * 100);
                         const analogCard = document.createElement('div');
                         analogCard.className = 'analog-card';
                         analogCard.setAttribute('data-input', input.id);
                         analogCard.innerHTML = `
                             <div class="analog-header">
                                 <h4>A${input.id + 1}</h4>
-                                <span class="analog-value">${input.value}</span>
+                                <span class="analog-value">${input.value} (${input.voltage.toFixed(2)}V)</span>
                             </div>
-                            <div class="analog-percentage">${percentage}%</div>
+                            <div class="analog-percentage">${input.percentage}%</div>
                             <div class="analog-progress">
-                                <div class="analog-fill" style="width: ${percentage}%"></div>
+                                <div class="analog-fill" style="width: ${input.percentage}%"></div>
                             </div>
                         `;
                         analogInputsGrid.appendChild(analogCard);
@@ -2061,7 +2943,294 @@ function refreshSystemStatus() {
         });
 }
 
+// Fetch settings from server
+function fetchSettings() {
+    fetch('/api/config')
+        .then(response => response.json())
+        .then(data => {
+            // General settings
+            document.getElementById('device-name-setting').value = data.device_name;
+            document.getElementById('debug-mode').checked = data.debug_mode;
+            
+            // Network settings
+            document.getElementById('wifi-ssid').value = data.wifi_ssid || '';
+            document.getElementById('wifi-password').value = ''; // Don't populate password for security
+            document.getElementById('dhcp-mode').checked = data.dhcp_mode;
+            
+            // Show/hide static IP settings based on DHCP mode
+            document.getElementById('static-ip-settings').style.display = data.dhcp_mode ? 'none' : 'block';
+            
+            if (!data.dhcp_mode) {
+                document.getElementById('ip-address').value = data.ip || '';
+                document.getElementById('gateway').value = data.gateway || '';
+                document.getElementById('subnet').value = data.subnet || '255.255.255.0';
+                document.getElementById('dns1').value = data.dns1 || '8.8.8.8';
+                document.getElementById('dns2').value = data.dns2 || '8.8.4.4';
+            }
+            
+            // Firmware version
+            if (data.firmware_version) {
+                document.getElementById('firmware-version').textContent = data.firmware_version;
+                document.getElementById('firmware-version-display').textContent = data.firmware_version;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading settings:', error);
+            showToast('Failed to load settings', 'error');
+        });
+}
 
+// Save settings
+function saveSettings() {
+    // Collect settings data
+    const config = {
+        device_name: document.getElementById('device-name-setting').value,
+        debug_mode: document.getElementById('debug-mode').checked,
+        dhcp_mode: document.getElementById('dhcp-mode').checked,
+        wifi_ssid: document.getElementById('wifi-ssid').value,
+        wifi_password: document.getElementById('wifi-password').value
+    };
+    
+    // Add static IP settings if DHCP is disabled
+    if (!config.dhcp_mode) {
+        config.ip = document.getElementById('ip-address').value;
+        config.gateway = document.getElementById('gateway').value;
+        config.subnet = document.getElementById('subnet').value;
+        config.dns1 = document.getElementById('dns1').value;
+        config.dns2 = document.getElementById('dns2').value;
+    }
+    
+    // Send to server
+    fetch('/api/config', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast('Settings saved. Device will restart.', 'success');
+            setTimeout(() => {
+                showToast('Waiting for device to come back online...', 'info');
+                setTimeout(checkDeviceOnline, 5000);
+            }, 2000);
+        } else {
+            showToast(`Failed to save settings: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving settings:', error);
+        showToast('Network error. Could not save settings', 'error');
+    });
+}
+
+// Reset settings to default
+function resetSettings() {
+    fetch('/api/config', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reset: true })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast('Settings reset to default. Device will restart.', 'success');
+            setTimeout(() => {
+                showToast('Waiting for device to come back online...', 'info');
+                setTimeout(checkDeviceOnline, 5000);
+            }, 2000);
+        } else {
+            showToast(`Failed to reset settings: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error resetting settings:', error);
+        showToast('Network error. Could not reset settings', 'error');
+    });
+}
+
+// Fetch device time
+function fetchDeviceTime() {
+    fetch('/api/time')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('device-time').textContent = data.formatted;
+            document.getElementById('rtc-available').textContent = data.rtc_available ? 'Available' : 'Not Available';
+            
+            // Set datetime-local input to current device time if available
+            const manualDatetime = document.getElementById('manual-datetime');
+            if (manualDatetime) {
+                const dateStr = `${data.year}-${String(data.month).padStart(2, '0')}-${String(data.day).padStart(2, '0')}`;
+                const timeStr = `${String(data.hour).padStart(2, '0')}:${String(data.minute).padStart(2, '0')}`;
+                manualDatetime.value = `${dateStr}T${timeStr}`;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching device time:', error);
+        });
+}
+
+// Set time from browser
+function setTimeFromBrowser() {
+    const now = new Date();
+    
+    const timeData = {
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+        day: now.getDate(),
+        hour: now.getHours(),
+        minute: now.getMinutes(),
+        second: now.getSeconds()
+    };
+    
+    setDeviceTime(timeData);
+}
+
+// Set time manually
+function setTimeManually() {
+    const datetimeInput = document.getElementById('manual-datetime');
+    if (!datetimeInput.value) {
+        showToast('Please select a date and time', 'warning');
+        return;
+    }
+    
+    const dateObj = new Date(datetimeInput.value);
+    
+    const timeData = {
+        year: dateObj.getFullYear(),
+        month: dateObj.getMonth() + 1,
+        day: dateObj.getDate(),
+        hour: dateObj.getHours(),
+        minute: dateObj.getMinutes(),
+        second: dateObj.getSeconds()
+    };
+    
+    setDeviceTime(timeData);
+}
+
+// Sync time from NTP
+function syncNTPTime() {
+    fetch('/api/time', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            ntp_sync: true
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast('Time synchronized from NTP server', 'success');
+            fetchDeviceTime(); // Refresh displayed time
+        } else {
+            showToast(`Failed to sync time: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error syncing time:', error);
+        showToast('Network error. Could not sync time', 'error');
+    });
+}
+
+// Set device time
+function setDeviceTime(timeData) {
+    fetch('/api/time', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(timeData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast('Device time updated successfully', 'success');
+            fetchDeviceTime(); // Refresh displayed time
+        } else {
+            showToast(`Failed to set time: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error setting time:', error);
+        showToast('Network error. Could not set time', 'error');
+    });
+}
+
+// Update firmware
+function updateFirmware() {
+    const fileInput = document.getElementById('firmware-file');
+    if (!fileInput.files.length) {
+        showToast('Please select a firmware file', 'warning');
+        return;
+    }
+    
+    const firmwareFile = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('firmware', firmwareFile);
+    
+    const progressBar = document.getElementById('update-progress');
+    const progressFill = document.querySelector('#update-progress .progress-fill');
+    const progressText = document.querySelector('#update-progress .progress-text');
+    
+    // Show progress bar
+    progressBar.style.display = 'block';
+    
+    // Create AJAX request with progress monitoring
+    const xhr = new XMLHttpRequest();
+    
+    xhr.upload.onprogress = function(e) {
+        if (e.lengthComputable) {
+            const percentComplete = Math.floor((e.loaded / e.total) * 100);
+            progressFill.style.width = percentComplete + '%';
+            progressText.textContent = percentComplete + '%';
+        }
+    };
+    
+    xhr.onload = function() {
+        if (xhr.status === 200) {
+            try {
+                const response = JSON.parse(xhr.responseText);
+                if (response.status === 'success') {
+                    showToast('Firmware uploaded successfully. Device is updating...', 'success');
+                    setTimeout(() => {
+                        showToast('Waiting for device to reboot...', 'info');
+                        setTimeout(checkDeviceOnline, 10000);
+                    }, 2000);
+                } else {
+                    showToast(`Firmware update failed: ${response.message}`, 'error');
+                }
+            } catch (e) {
+                showToast('Firmware update complete. Device will reboot.', 'success');
+                setTimeout(checkDeviceOnline, 10000);
+            }
+        } else {
+            showToast('Firmware update failed with status: ' + xhr.status, 'error');
+        }
+        
+        // Hide progress bar after a delay
+        setTimeout(() => {
+            progressBar.style.display = 'none';
+            progressFill.style.width = '0%';
+            progressText.textContent = '0%';
+        }, 3000);
+    };
+    
+    xhr.onerror = function() {
+        showToast('Network error during firmware update', 'error');
+        progressBar.style.display = 'none';
+    };
+    
+    xhr.open('POST', '/api/upload', true);
+    xhr.send(formData);
+    
+    showToast('Uploading firmware...', 'info');
+}
 
 // Reboot device
 function rebootDevice() {
@@ -2091,6 +3260,11 @@ function checkDeviceOnline() {
             if (response.ok) {
                 showToast('Device is back online', 'success');
                 refreshSystemStatus();
+                
+                // If we were in schedules section, refresh that too
+                if (document.getElementById('schedules').classList.contains('active')) {
+                    fetchSchedules();
+                }
             } else {
                 setTimeout(checkDeviceOnline, 2000);
             }
@@ -2217,826 +3391,6 @@ function controlSelectedRelays(state) {
         });
 }
 
-// Fetch schedules from the server
-function fetchSchedules() {
-    fetch('/api/schedules')
-        .then(response => response.json())
-        .then(data => {
-            renderSchedulesTable(data.schedules);
-        })
-        .catch(error => {
-            console.error('Error fetching schedules:', error);
-            showToast('Failed to load schedules', 'error');
-        });
-}
-
-// Render schedules table
-function renderSchedulesTable(schedules) {
-    const tableBody = document.querySelector('#schedules-table tbody');
-    if (!tableBody) return;
-    
-    tableBody.innerHTML = '';
-    
-    if (!schedules || schedules.length === 0) {
-        const row = document.createElement('tr');
-        row.innerHTML = '<td colspan="7" class="text-center">No schedules configured</td>';
-        tableBody.appendChild(row);
-        return;
-    }
-    
-    schedules.forEach(schedule => {
-        const row = document.createElement('tr');
-        
-        // Format days
-        const days = [];
-        if (schedule.days & 1) days.push('Sun');
-        if (schedule.days & 2) days.push('Mon');
-        if (schedule.days & 4) days.push('Tue');
-        if (schedule.days & 8) days.push('Wed');
-        if (schedule.days & 16) days.push('Thu');
-        if (schedule.days & 32) days.push('Fri');
-        if (schedule.days & 64) days.push('Sat');
-        
-        // Format time
-        const hour = schedule.hour.toString().padStart(2, '0');
-        const minute = schedule.minute.toString().padStart(2, '0');
-        
-        // Format action
-        const actions = ['Turn OFF', 'Turn ON', 'Toggle'];
-        
-        // Format target
-        let targetText = '';
-        if (schedule.targetType === 0) {
-            targetText = `Relay ${schedule.targetId + 1}`;
-        } else {
-            targetText = 'Multiple Relays';
-        }
-        
-        row.innerHTML = `
-            <td><input type="checkbox" ${schedule.enabled ? 'checked' : ''} onchange="toggleSchedule(${schedule.id}, this.checked)"></td>
-            <td>${schedule.name}</td>
-            <td>${days.join(', ')}</td>
-            <td>${hour}:${minute}</td>
-            <td>${actions[schedule.action]}</td>
-            <td>${targetText}</td>
-            <td>
-                <div class="action-btns">
-                    <button class="btn btn-secondary btn-sm" onclick="editSchedule(${schedule.id})"><i class="fa fa-edit"></i></button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteSchedule(${schedule.id})"><i class="fa fa-trash"></i></button>
-                </div>
-            </td>
-        `;
-        
-        tableBody.appendChild(row);
-    });
-}
-
-// Open schedule modal
-function openScheduleModal(scheduleId = null) {
-    const modal = document.getElementById('schedule-modal');
-    if (!modal) return;
-    
-    modal.style.display = 'block';
-    
-    // Reset form
-    document.getElementById('schedule-form').reset();
-    document.getElementById('schedule-id').value = '';
-    
-    // Reset day checkboxes
-    document.querySelectorAll('.days-selector input[type="checkbox"]').forEach(checkbox => {
-        checkbox.checked = false;
-    });
-    
-    // Reset multiple targets
-    document.querySelectorAll('#relay-checkboxes input[type="checkbox"]').forEach(checkbox => {
-        checkbox.checked = false;
-    });
-    
-    // Show single target by default
-    document.getElementById('single-target').style.display = 'block';
-    document.getElementById('multiple-targets').style.display = 'none';
-    
-    if (scheduleId !== null) {
-        // Load schedule data
-        fetch(`/api/schedules?id=${scheduleId}`)
-            .then(response => response.json())
-            .then(data => {
-                const schedule = data.schedule;
-                
-                document.getElementById('schedule-id').value = schedule.id;
-                document.getElementById('schedule-enabled').checked = schedule.enabled;
-                document.getElementById('schedule-name').value = schedule.name;
-                
-                // Set days
-                for (let i = 0; i < 7; i++) {
-                    const checkbox = document.querySelector(`.days-selector input[data-day="${i}"]`);
-                    if (checkbox) {
-                        checkbox.checked = !!(schedule.days & (1 << i));
-                    }
-                }
-                
-                // Set time
-                const hour = schedule.hour.toString().padStart(2, '0');
-                const minute = schedule.minute.toString().padStart(2, '0');
-                document.getElementById('schedule-time').value = `${hour}:${minute}`;
-                
-                // Set action
-                document.getElementById('schedule-action').value = schedule.action;
-                
-                // Set target type
-                document.getElementById('schedule-target-type').value = schedule.targetType;
-                
-                if (schedule.targetType === 0) {
-                    // Single target
-                    document.getElementById('single-target').style.display = 'block';
-                    document.getElementById('multiple-targets').style.display = 'none';
-                    document.getElementById('schedule-target-id').value = schedule.targetId;
-                } else {
-                    // Multiple targets
-                    document.getElementById('single-target').style.display = 'none';
-                    document.getElementById('multiple-targets').style.display = 'block';
-                    
-                    // Set checkboxes
-                    for (let i = 0; i < 16; i++) {
-                        const checkbox = document.querySelector(`#relay-checkboxes input[data-relay="${i}"]`);
-                        if (checkbox) {
-                            checkbox.checked = !!(schedule.targetId & (1 << i));
-                        }
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Error loading schedule:', error);
-                showToast('Failed to load schedule details', 'error');
-            });
-    }
-}
-
-// Save schedule
-function saveSchedule() {
-    const scheduleId = document.getElementById('schedule-id').value;
-    const isNew = !scheduleId;
-    
-    // Calculate days bitmask
-    let daysBitmask = 0;
-    document.querySelectorAll('.days-selector input[type="checkbox"]:checked').forEach(checkbox => {
-        const day = parseInt(checkbox.getAttribute('data-day'));
-        daysBitmask |= (1 << day);
-    });
-    
-    // Get time
-    const timeValue = document.getElementById('schedule-time').value;
-    const [hour, minute] = timeValue.split(':').map(Number);
-    
-    // Get target
-    const targetType = parseInt(document.getElementById('schedule-target-type').value);
-    let targetId = 0;
-    
-    if (targetType === 0) {
-        // Single relay
-        targetId = parseInt(document.getElementById('schedule-target-id').value);
-    } else {
-        // Multiple relays - calculate bitmask
-        document.querySelectorAll('#relay-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
-            const relay = parseInt(checkbox.getAttribute('data-relay'));
-            targetId |= (1 << relay);
-        });
-    }
-    
-    // Create schedule object
-    const schedule = {
-        id: scheduleId ? parseInt(scheduleId) : null,
-        enabled: document.getElementById('schedule-enabled').checked,
-        name: document.getElementById('schedule-name').value,
-        days: daysBitmask,
-        hour: hour,
-        minute: minute,
-        action: parseInt(document.getElementById('schedule-action').value),
-        targetType: targetType,
-        targetId: targetId
-    };
-    
-    // Save to server
-    fetch('/api/schedules', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ schedule: schedule })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            document.getElementById('schedule-modal').style.display = 'none';
-            showToast(`Schedule ${isNew ? 'created' : 'updated'} successfully`);
-            fetchSchedules();
-        } else {
-            showToast(`Failed to ${isNew ? 'create' : 'update'} schedule: ${data.message}`, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error saving schedule:', error);
-        showToast(`Network error. Could not ${isNew ? 'create' : 'update'} schedule`, 'error');
-    });
-}
-
-// Global functions for schedule management
-window.editSchedule = function(scheduleId) {
-    openScheduleModal(scheduleId);
-};
-
-window.deleteSchedule = function(scheduleId) {
-    if (confirm('Are you sure you want to delete this schedule?')) {
-        fetch(`/api/schedules`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-                id: scheduleId,
-                delete: true
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                showToast('Schedule deleted successfully');
-                fetchSchedules();
-            } else {
-                showToast(`Failed to delete schedule: ${data.message}`, 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error deleting schedule:', error);
-            showToast('Network error. Could not delete schedule', 'error');
-        });
-    }
-};
-
-window.toggleSchedule = function(scheduleId, enabled) {
-    fetch('/api/schedules', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-            id: scheduleId,
-            enabled: enabled
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            showToast(`Schedule ${enabled ? 'enabled' : 'disabled'}`);
-        } else {
-            showToast(`Failed to update schedule: ${data.message}`, 'error');
-            fetchSchedules(); // Refresh to get actual state
-        }
-    })
-    .catch(error => {
-        console.error('Error toggling schedule:', error);
-        showToast('Network error. Could not update schedule', 'error');
-        fetchSchedules(); // Refresh to get actual state
-    });
-};
-
-// Fetch analog triggers from the server
-function fetchAnalogTriggers() {
-    fetch('/api/analog-triggers')
-        .then(response => response.json())
-        .then(data => {
-            renderTriggersTable(data.triggers);
-        })
-        .catch(error => {
-            console.error('Error fetching analog triggers:', error);
-            showToast('Failed to load analog triggers', 'error');
-        });
-}
-
-// Render triggers table
-function renderTriggersTable(triggers) {
-    const tableBody = document.querySelector('#triggers-table tbody');
-    if (!tableBody) return;
-    
-    tableBody.innerHTML = '';
-    
-    if (!triggers || triggers.length === 0) {
-        const row = document.createElement('tr');
-        row.innerHTML = '<td colspan="8" class="text-center">No triggers configured</td>';
-        tableBody.appendChild(row);
-        return;
-    }
-    
-    triggers.forEach(trigger => {
-        const row = document.createElement('tr');
-        
-        // Format input
-        const inputs = ['A1', 'A2', 'A3', 'A4'];
-        
-        // Format condition
-        const conditions = ['Above', 'Below', 'Equal to'];
-        
-        // Format action
-        const actions = ['Turn OFF', 'Turn ON', 'Toggle'];
-        
-        // Format target
-        let targetText = '';
-        if (trigger.targetType === 0) {
-            targetText = `Relay ${trigger.targetId + 1}`;
-        } else {
-            targetText = 'Multiple Relays';
-        }
-        
-        row.innerHTML = `
-            <td><input type="checkbox" ${trigger.enabled ? 'checked' : ''} onchange="toggleTrigger(${trigger.id}, this.checked)"></td>
-            <td>${trigger.name}</td>
-            <td>${inputs[trigger.analogInput]}</td>
-            <td>${conditions[trigger.condition]}</td>
-            <td>${trigger.threshold}</td>
-            <td>${actions[trigger.action]}</td>
-            <td>${targetText}</td>
-            <td>
-                <div class="action-btns">
-                    <button class="btn btn-secondary btn-sm" onclick="editTrigger(${trigger.id})"><i class="fa fa-edit"></i></button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteTrigger(${trigger.id})"><i class="fa fa-trash"></i></button>
-                </div>
-            </td>
-        `;
-        
-        tableBody.appendChild(row);
-    });
-}
-
-// Open trigger modal
-function openTriggerModal(triggerId = null) {
-    const modal = document.getElementById('trigger-modal');
-    if (!modal) return;
-    
-    modal.style.display = 'block';
-    
-    // Reset form
-    document.getElementById('trigger-form').reset();
-    document.getElementById('trigger-id').value = '';
-    document.getElementById('threshold-value').textContent = '2048';
-    
-    // Reset multiple targets
-    document.querySelectorAll('#trigger-relay-checkboxes input[type="checkbox"]').forEach(checkbox => {
-        checkbox.checked = false;
-    });
-    
-    // Show single target by default
-    document.getElementById('trigger-single-target').style.display = 'block';
-    document.getElementById('trigger-multiple-targets').style.display = 'none';
-    
-    if (triggerId !== null) {
-        // Load trigger data
-        fetch(`/api/analog-triggers?id=${triggerId}`)
-            .then(response => response.json())
-            .then(data => {
-                const trigger = data.trigger;
-                
-                document.getElementById('trigger-id').value = trigger.id;
-                document.getElementById('trigger-enabled').checked = trigger.enabled;
-                document.getElementById('trigger-name').value = trigger.name;
-                document.getElementById('trigger-input').value = trigger.analogInput;
-                document.getElementById('trigger-condition').value = trigger.condition;
-                document.getElementById('trigger-threshold').value = trigger.threshold;
-                document.getElementById('threshold-value').textContent = trigger.threshold;
-                document.getElementById('trigger-action').value = trigger.action;
-                document.getElementById('trigger-target-type').value = trigger.targetType;
-                
-                if (trigger.targetType === 0) {
-                    // Single target
-                    document.getElementById('trigger-single-target').style.display = 'block';
-                    document.getElementById('trigger-multiple-targets').style.display = 'none';
-                    document.getElementById('trigger-target-id').value = trigger.targetId;
-                } else {
-                    // Multiple targets
-                    document.getElementById('trigger-single-target').style.display = 'none';
-                    document.getElementById('trigger-multiple-targets').style.display = 'block';
-                    
-                    // Set checkboxes
-                    for (let i = 0; i < 16; i++) {
-                        const checkbox = document.querySelector(`#trigger-relay-checkboxes input[data-relay="${i}"]`);
-                        if (checkbox) {
-                            checkbox.checked = !!(trigger.targetId & (1 << i));
-                        }
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Error loading trigger:', error);
-                showToast('Failed to load trigger details', 'error');
-            });
-    }
-}
-
-// Save trigger
-function saveTrigger() {
-    const triggerId = document.getElementById('trigger-id').value;
-    const isNew = !triggerId;
-    
-    // Get target
-    const targetType = parseInt(document.getElementById('trigger-target-type').value);
-    let targetId = 0;
-    
-    if (targetType === 0) {
-        // Single relay
-        targetId = parseInt(document.getElementById('trigger-target-id').value);
-    } else {
-        // Multiple relays - calculate bitmask
-        document.querySelectorAll('#trigger-relay-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
-            const relay = parseInt(checkbox.getAttribute('data-relay'));
-            targetId |= (1 << relay);
-        });
-    }
-    
-    // Create trigger object
-    const trigger = {
-        id: triggerId ? parseInt(triggerId) : null,
-        enabled: document.getElementById('trigger-enabled').checked,
-        name: document.getElementById('trigger-name').value,
-        analogInput: parseInt(document.getElementById('trigger-input').value),
-        condition: parseInt(document.getElementById('trigger-condition').value),
-        threshold: parseInt(document.getElementById('trigger-threshold').value),
-        action: parseInt(document.getElementById('trigger-action').value),
-        targetType: targetType,
-        targetId: targetId
-    };
-    
-    // Save to server
-    fetch('/api/analog-triggers', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ trigger: trigger })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            document.getElementById('trigger-modal').style.display = 'none';
-            showToast(`Trigger ${isNew ? 'created' : 'updated'} successfully`);
-            fetchAnalogTriggers();
-        } else {
-            showToast(`Failed to ${isNew ? 'create' : 'update'} trigger: ${data.message}`, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error saving trigger:', error);
-        showToast(`Network error. Could not ${isNew ? 'create' : 'update'} trigger`, 'error');
-    });
-}
-
-// Global functions for trigger management
-window.editTrigger = function(triggerId) {
-    openTriggerModal(triggerId);
-};
-
-window.deleteTrigger = function(triggerId) {
-    if (confirm('Are you sure you want to delete this trigger?')) {
-        fetch(`/api/analog-triggers`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-                id: triggerId,
-                delete: true
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                showToast('Trigger deleted successfully');
-                fetchAnalogTriggers();
-            } else {
-                showToast(`Failed to delete trigger: ${data.message}`, 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error deleting trigger:', error);
-            showToast('Network error. Could not delete trigger', 'error');
-        });
-    }
-};
-
-window.toggleTrigger = function(triggerId, enabled) {
-    fetch('/api/analog-triggers', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-            id: triggerId,
-            enabled: enabled
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            showToast(`Trigger ${enabled ? 'enabled' : 'disabled'}`);
-        } else {
-            showToast(`Failed to update trigger: ${data.message}`, 'error');
-            fetchAnalogTriggers(); // Refresh to get actual state
-        }
-    })
-    .catch(error => {
-        console.error('Error toggling trigger:', error);
-        showToast('Network error. Could not update trigger', 'error');
-        fetchAnalogTriggers(); // Refresh to get actual state
-    });
-};
-
-// Fetch settings from server
-function fetchSettings() {
-    fetch('/api/config')
-        .then(response => response.json())
-        .then(data => {
-            // General settings
-            document.getElementById('device-name-setting').value = data.device_name;
-            document.getElementById('debug-mode').checked = data.debug_mode;
-            
-            // Network settings
-            document.getElementById('wifi-ssid').value = data.wifi_ssid || '';
-            document.getElementById('wifi-password').value = ''; // Don't populate password for security
-            document.getElementById('dhcp-mode').checked = data.dhcp_mode;
-            
-            // Show/hide static IP settings based on DHCP mode
-            document.getElementById('static-ip-settings').style.display = data.dhcp_mode ? 'none' : 'block';
-            
-            if (!data.dhcp_mode) {
-                document.getElementById('ip-address').value = data.ip || '';
-                document.getElementById('gateway').value = data.gateway || '';
-                document.getElementById('subnet').value = data.subnet || '255.255.255.0';
-                document.getElementById('dns1').value = data.dns1 || '8.8.8.8';
-                document.getElementById('dns2').value = data.dns2 || '8.8.4.4';
-            }
-            
-            // Firmware version
-            if (data.firmware_version) {
-                document.getElementById('firmware-version').textContent = data.firmware_version;
-                document.getElementById('firmware-version-display').textContent = data.firmware_version;
-            }
-        })
-        .catch(error => {
-            console.error('Error loading settings:', error);
-            showToast('Failed to load settings', 'error');
-        });
-}
-
-// Save settings
-function saveSettings() {
-    // Collect settings data
-    const config = {
-        device_name: document.getElementById('device-name-setting').value,
-        debug_mode: document.getElementById('debug-mode').checked,
-        dhcp_mode: document.getElementById('dhcp-mode').checked,
-        wifi_ssid: document.getElementById('wifi-ssid').value,
-        wifi_password: document.getElementById('wifi-password').value
-    };
-    
-    // Add static IP settings if DHCP is disabled
-    if (!config.dhcp_mode) {
-        config.ip = document.getElementById('ip-address').value;
-        config.gateway = document.getElementById('gateway').value;
-        config.subnet = document.getElementById('subnet').value;
-        config.dns1 = document.getElementById('dns1').value;
-        config.dns2 = document.getElementById('dns2').value;
-    }
-    
-    // Send to server
-    fetch('/api/config', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(config)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            showToast('Settings saved. Device will restart.', 'success');
-            setTimeout(() => {
-                showToast('Waiting for device to come back online...', 'info');
-                setTimeout(checkDeviceOnline, 5000);
-            }, 2000);
-        } else {
-            showToast(`Failed to save settings: ${data.message}`, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error saving settings:', error);
-        showToast('Network error. Could not save settings', 'error');
-    });
-}
-
-// Reset settings to default
-function resetSettings() {
-    fetch('/api/config', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ reset: true })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            showToast('Settings reset to default. Device will restart.', 'success');
-            setTimeout(() => {
-                showToast('Waiting for device to come back online...', 'info');
-                setTimeout(checkDeviceOnline, 5000);
-            }, 2000);
-        } else {
-            showToast(`Failed to reset settings: ${data.message}`, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error resetting settings:', error);
-        showToast('Network error. Could not reset settings', 'error');
-    });
-}
-
-// Set time from browser
-function setTimeFromBrowser() {
-    const now = new Date();
-    
-    const timeData = {
-        year: now.getFullYear(),
-        month: now.getMonth() + 1,
-        day: now.getDate(),
-        hour: now.getHours(),
-        minute: now.getMinutes(),
-        second: now.getSeconds()
-    };
-    
-    setDeviceTime(timeData);
-}
-
-// Set time manually
-function setTimeManually() {
-    const datetimeInput = document.getElementById('manual-datetime');
-    if (!datetimeInput.value) {
-        showToast('Please select a date and time', 'warning');
-        return;
-    }
-    
-    const dateObj = new Date(datetimeInput.value);
-    
-    const timeData = {
-        year: dateObj.getFullYear(),
-        month: dateObj.getMonth() + 1,
-        day: dateObj.getDate(),
-        hour: dateObj.getHours(),
-        minute: dateObj.getMinutes(),
-        second: dateObj.getSeconds()
-    };
-    
-    setDeviceTime(timeData);
-}
-
-// Sync time from NTP
-function syncNTPTime() {
-    fetch('/api/time', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            ntp_sync: true
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            showToast('Time synchronized from NTP server', 'success');
-            fetchDeviceTime(); // Refresh displayed time
-        } else {
-            showToast(`Failed to sync time: ${data.message}`, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error syncing time:', error);
-        showToast('Network error. Could not sync time', 'error');
-    });
-}
-
-// Set device time
-function setDeviceTime(timeData) {
-    fetch('/api/time', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(timeData)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            showToast('Device time updated successfully', 'success');
-            fetchDeviceTime(); // Refresh displayed time
-        } else {
-            showToast(`Failed to set time: ${data.message}`, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error setting time:', error);
-        showToast('Network error. Could not set time', 'error');
-    });
-}
-
-// Fetch device time
-function fetchDeviceTime() {
-    fetch('/api/time')
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('device-time').textContent = data.formatted;
-            document.getElementById('rtc-available').textContent = data.rtc_available ? 'Available' : 'Not Available';
-            
-            // Set datetime-local input to current device time if available
-            const manualDatetime = document.getElementById('manual-datetime');
-            if (manualDatetime) {
-                                const dateStr = `${data.year}-${String(data.month).padStart(2, '0')}-${String(data.day).padStart(2, '0')}`;
-                const timeStr = `${String(data.hour).padStart(2, '0')}:${String(data.minute).padStart(2, '0')}`;
-                manualDatetime.value = `${dateStr}T${timeStr}`;
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching device time:', error);
-        });
-}
-
-// Update firmware
-function updateFirmware() {
-    const fileInput = document.getElementById('firmware-file');
-    if (!fileInput.files.length) {
-        showToast('Please select a firmware file', 'warning');
-        return;
-    }
-    
-    const firmwareFile = fileInput.files[0];
-    const formData = new FormData();
-    formData.append('firmware', firmwareFile);
-    
-    const progressBar = document.getElementById('update-progress');
-    const progressFill = document.querySelector('#update-progress .progress-fill');
-    const progressText = document.querySelector('#update-progress .progress-text');
-    
-    // Show progress bar
-    progressBar.style.display = 'block';
-    
-    // Create AJAX request with progress monitoring
-    const xhr = new XMLHttpRequest();
-    
-    xhr.upload.onprogress = function(e) {
-        if (e.lengthComputable) {
-            const percentComplete = Math.floor((e.loaded / e.total) * 100);
-            progressFill.style.width = percentComplete + '%';
-            progressText.textContent = percentComplete + '%';
-        }
-    };
-    
-    xhr.onload = function() {
-        if (xhr.status === 200) {
-            try {
-                const response = JSON.parse(xhr.responseText);
-                if (response.status === 'success') {
-                    showToast('Firmware uploaded successfully. Device is updating...', 'success');
-                    setTimeout(() => {
-                        showToast('Waiting for device to reboot...', 'info');
-                        setTimeout(checkDeviceOnline, 10000);
-                    }, 2000);
-                } else {
-                    showToast(`Firmware update failed: ${response.message}`, 'error');
-                }
-            } catch (e) {
-                showToast('Firmware update complete. Device will reboot.', 'success');
-                setTimeout(checkDeviceOnline, 10000);
-            }
-        } else {
-            showToast('Firmware update failed with status: ' + xhr.status, 'error');
-        }
-        
-        // Hide progress bar after a delay
-        setTimeout(() => {
-            progressBar.style.display = 'none';
-            progressFill.style.width = '0%';
-            progressText.textContent = '0%';
-        }, 3000);
-    };
-    
-    xhr.onerror = function() {
-        showToast('Network error during firmware update', 'error');
-        progressBar.style.display = 'none';
-    };
-    
-    xhr.open('POST', '/api/upload', true);
-    xhr.send(formData);
-    
-    showToast('Uploading firmware...', 'info');
-}
-
 // Show toast notification with improved visibility
 function showToast(message, type = 'info') {
     // Clear any existing timeout
@@ -3067,43 +3421,3 @@ function showToast(message, type = 'info') {
         toast.className = 'toast';
     }, 3000);
 }
-
-// Initialize input controls
-function initInputControls() {
-    // Create digital input displays
-    const digitalInputsGrid = document.getElementById('digital-inputs-grid');
-    if (digitalInputsGrid) {
-        digitalInputsGrid.innerHTML = '';
-        for (let i = 0; i < 16; i++) {
-            const inputItem = document.createElement('div');
-            inputItem.className = 'input-item';
-            inputItem.setAttribute('data-input', i);
-            inputItem.innerHTML = `
-                Input ${i+1}
-                <div class="input-state"></div>
-            `;
-            digitalInputsGrid.appendChild(inputItem);
-        }
-    }
-    
-    // Create direct input displays (HT1-HT3)
-    const directInputsGrid = document.getElementById('direct-inputs-grid');
-    if (directInputsGrid) {
-        directInputsGrid.innerHTML = '';
-        for (let i = 0; i < 3; i++) {
-            const inputItem = document.createElement('div');
-            inputItem.className = 'input-item';
-            inputItem.setAttribute('data-input', 'ht' + i);
-            inputItem.innerHTML = `
-                HT${i+1}
-                <div class="input-state"></div>
-            `;
-            directInputsGrid.appendChild(inputItem);
-        }
-    }
-    
-    // Create visual input grid for graphical representation
-    createVisualInputGrid();
-}
-
-

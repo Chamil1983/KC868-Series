@@ -351,6 +351,61 @@ input:checked + .slider:before {
     transform: translateX(26px);
 }
 
+/* Additional styles for input-based triggers */
+#input-trigger-section,
+#time-trigger-section {
+    background-color: #f9f9f9;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+}
+
+#schedule-input-logic {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* Trigger type labels */
+.trigger-type {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.trigger-type-0 {
+    background-color: #2196F3; /* Blue for time-based */
+}
+
+.trigger-type-1 {
+    background-color: #FF9800; /* Orange for input-based */
+}
+
+.trigger-type-2 {
+    background-color: #9C27B0; /* Purple for combined */
+}
+
+/* Input selection styling */
+.input-container {
+    margin-bottom: 8px;
+    padding: 5px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+}
+
+.input-state-select {
+    margin-left: 5px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+}
+
 /* Visual representation styles */
 .visual-panel {
     background-color: white;
@@ -394,6 +449,14 @@ input:checked + .slider:before {
 
 .visual-label {
     font-size: 0.8em;
+}
+
+/* Improved checkbox layout */
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
 }
 
 /* Analog inputs styles */
@@ -602,94 +665,11 @@ input:checked + .slider:before {
     gap: 5px;
 }
 
-.checkbox-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 5px;
-}
-
 .form-actions {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
     margin-top: 20px;
-}
-
-/* Diagnostics styles */
-.diagnostics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
-}
-
-.diagnostics-card {
-    background-color: white;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-    padding: 15px;
-}
-
-.diagnostics-card h3 {
-    margin-top: 0;
-    margin-bottom: 15px;
-    color: #1a2b42;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 10px;
-}
-
-.debug-console {
-    margin-top: 15px;
-}
-
-.console-output {
-    height: 200px;
-    background-color: #222;
-    color: #0f0;
-    padding: 10px;
-    font-family: monospace;
-    overflow-y: auto;
-    margin-bottom: 10px;
-    border-radius: 4px;
-}
-
-.console-input {
-    display: flex;
-    gap: 10px;
-}
-
-#command-input {
-    flex-grow: 1;
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-
-.progress-bar {
-    display: none;
-    height: 20px;
-    background-color: #eee;
-    border-radius: 10px;
-    overflow: hidden;
-    margin-top: 15px;
-    position: relative;
-}
-
-.progress-fill {
-    height: 100%;
-    background-color: #2196F3;
-    width: 0;
-    transition: width 0.3s ease;
-}
-
-.progress-text {
-    position: absolute;
-    left: 0;
-    right: 0;
-    text-align: center;
-    color: white;
-    font-weight: bold;
-    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
-    line-height: 20px;
 }
 
 /* Communication styles */
@@ -773,6 +753,110 @@ input:checked + .slider:before {
     border-radius: 4px;
 }
 
+/* Settings styles */
+.settings-card {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.settings-card h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #1a2b42;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.settings-actions {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Diagnostics styles */
+.diagnostics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.diagnostics-card {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+}
+
+.diagnostics-card h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #1a2b42;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.debug-console {
+    margin-top: 15px;
+}
+
+.console-output {
+    height: 200px;
+    background-color: #222;
+    color: #0f0;
+    padding: 10px;
+    font-family: monospace;
+    overflow-y: auto;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+
+.console-input {
+    display: flex;
+    gap: 10px;
+}
+
+#command-input {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.progress-bar {
+    display: none;
+    height: 20px;
+    background-color: #eee;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 15px;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: #2196F3;
+    width: 0;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    position: absolute;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: white;
+    font-weight: bold;
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
+    line-height: 20px;
+}
+
 /* Toast notification */
 .toast {
     visibility: hidden;
@@ -803,6 +887,53 @@ input:checked + .slider:before {
 @keyframes fadeout {
     from {bottom: 30px; opacity: 1;}
     to {bottom: 0; opacity: 0;}
+}
+
+/* WebSocket connection status indicator */
+.connection-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.connection-status.connected {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.connection-status.connecting {
+    background-color: #FF9800;
+    color: white;
+    animation: pulse 1.5s infinite;
+}
+
+.connection-status.disconnected {
+    background-color: #F44336;
+    color: white;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+}
+
+.data-refresh-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #4CAF50;
+    margin-left: 5px;
+    animation: fade-out 2s forwards;
+}
+
+@keyframes fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
 }
 
 /* Responsive styles */
@@ -854,4 +985,20 @@ input:checked + .slider:before {
     .output-visual-grid, .input-visual-grid {
         min-width: 600px;
     }
+
+    .days-selector {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* When schedule modal is in combined view mode */
+#schedule-modal.combined-view #time-trigger-section,
+#schedule-modal.combined-view #input-trigger-section {
+    width: 48%;
+    display: inline-block;
+    vertical-align: top;
+}
+
+#schedule-modal.combined-view #time-trigger-section {
+    margin-right: 2%;
 }
