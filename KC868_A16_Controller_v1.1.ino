@@ -69,6 +69,11 @@
 #define ANALOG_PIN_3          35
 #define ANALOG_PIN_4          39
 
+// Analog input scaling
+#define ADC_MAX_VALUE         4095    // ESP32 ADC is 12-bit (0-4095)
+#define ADC_VOLTAGE_MAX       3.3     // ESP32 ADC reference voltage is 3.3V
+#define ANALOG_VOLTAGE_MAX    5.0     // Full scale of the analog inputs is 5V
+
 // Ethernet settings
 #define ETH_PHY_ADDR          0
 #define ETH_PHY_MDC           23
@@ -122,13 +127,14 @@ RCSwitch rfTransmitter = RCSwitch();
 RTC_DS3231 rtc;
 
 // Firmware version
-const String firmwareVersion = "2.1.1";
+const String firmwareVersion = "2.1.2";
 
 // System state variables
 bool outputStates[16] = { false };        // Current output states
 bool inputStates[16] = { false };         // Current input states
 bool directInputStates[3] = { false };    // Current HT1-HT3 states
-int analogValues[4] = { 0 };              // Current analog input values
+int analogValues[4] = { 0 };              // Current analog input values (raw ADC values)
+float analogVoltages[4] = { 0.0 };        // Current analog input voltages (0-5V)
 bool ethConnected = false;              // Ethernet connection status
 bool wifiConnected = false;             // WiFi connection status
 String deviceName = "KC868-A16";        // Device name (changeable)
@@ -185,16 +191,20 @@ File fsUploadFile;
 // Flag for device restart
 bool restartRequired = false;
 
-// Scheduling structures
+// Enhanced scheduling structure with input trigger support
 struct TimeSchedule {
     bool enabled;
-    uint8_t days;       // Bit field: bit 0=Sunday, bit 1=Monday, ..., bit 6=Saturday
-    uint8_t hour;
-    uint8_t minute;
-    uint8_t action;     // 0=OFF, 1=ON, 2=TOGGLE
-    uint8_t targetType; // 0=Output, 1=Multiple outputs
-    uint16_t targetId;   // Output number (0-15) or bitmask for multiple outputs
-    char name[32];      // Name/description of the schedule
+    uint8_t triggerType;  // 0=Time-based, 1=Input-based, 2=Combined
+    uint8_t days;         // Bit field: bit 0=Sunday, bit 1=Monday, ..., bit 6=Saturday (for time-based)
+    uint8_t hour;         // Hour for time-based trigger
+    uint8_t minute;       // Minute for time-based trigger
+    uint16_t inputMask;   // Bit mask for inputs (bits 0-15 for digital inputs, bits 16-18 for HT1-HT3)
+    uint16_t inputStates; // Required state for each input (0=LOW, 1=HIGH)
+    uint8_t logic;        // 0=AND (all conditions must be met), 1=OR (any condition can trigger)
+    uint8_t action;       // 0=OFF, 1=ON, 2=TOGGLE
+    uint8_t targetType;   // 0=Output, 1=Multiple outputs
+    uint16_t targetId;    // Output number (0-15) or bitmask for multiple outputs
+    char name[32];        // Name/description of the schedule
 };
 
 TimeSchedule schedules[MAX_SCHEDULES];
@@ -271,6 +281,8 @@ void syncTimeFromClient(int year, int month, int day, int hour, int minute, int 
 String getTimeString();
 String processCommand(String command);
 int readAnalogInput(uint8_t index);
+float convertAnalogToVoltage(int analogValue);
+int calculatePercentage(float voltage);
 void printIOStates(); // New function to print I/O states for debugging
 
 // Setup function
@@ -345,6 +357,7 @@ void setup() {
     // Read initial analog values
     for (int i = 0; i < 4; i++) {
         analogValues[i] = readAnalogInput(i);
+        analogVoltages[i] = convertAnalogToVoltage(analogValues[i]);
     }
 
     // Initialize WebSocket client array
@@ -399,6 +412,7 @@ void loop() {
             int newValue = readAnalogInput(i);
             if (abs(newValue - analogValues[i]) > 20) { // Apply some hysteresis
                 analogValues[i] = newValue;
+                analogVoltages[i] = convertAnalogToVoltage(newValue); // Update voltage
                 analogChanged = true;
             }
         }
@@ -447,6 +461,50 @@ void loop() {
     }
 }
 
+// Improved calibration function using measured data points
+float convertAnalogToVoltage(int analogValue) {
+    // Calibration data points (actual voltage, ADC reading)
+    // [0V, 0], [1V, 1054], [2V, 2287], [3V, 3769], [3.13V, 4096]
+    
+    // Handle limits first
+    if (analogValue >= 4096) {
+        return 5.0f;  // Maximum reading (scale to 5V)
+    }
+    else if (analogValue <= 0) {
+        return 0.0f;  // Minimum reading
+    }
+    
+    // Piecewise linear interpolation between calibration points
+    if (analogValue < 1054) {
+        // Between 0V and 1V
+        return (float)analogValue * 1.0f / 1054.0f;
+    }
+    else if (analogValue < 2287) {
+        // Between 1V and 2V
+        return 1.0f + (float)(analogValue - 1054) * 1.0f / (2287 - 1054);
+    }
+    else if (analogValue < 3769) {
+        // Between 2V and 3V
+        return 2.0f + (float)(analogValue - 2287) * 1.0f / (3769 - 2287);
+    }
+    else {
+        // Between 3V and 5V (max)
+        return 3.0f + (float)(analogValue - 3769) * 2.0f / (4096 - 3769);
+    }
+}
+
+// Calculate percentage based on 0-5V range (remains unchanged)
+// Calculate percentage based on 0-5V range
+int calculatePercentage(float voltage) {
+    // Ensure voltage doesn't exceed range
+    if (voltage > 5.0f) voltage = 5.0f;
+    if (voltage < 0.0f) voltage = 0.0f;
+    
+    return (int)((voltage / 5.0f) * 100.0f);
+}
+
+
+
 // Print I/O states for debugging
 void printIOStates() {
     Serial.println("--- Current I/O States ---");
@@ -478,6 +536,20 @@ void printIOStates() {
         Serial.print(outputStates[i] ? "1" : "0");
     }
     Serial.println();
+
+    // Print analog inputs with voltage values
+    Serial.println("Analog Inputs (0-5V range):");
+    for (int i = 0; i < 4; i++) {
+        Serial.print("A");
+        Serial.print(i + 1);
+        Serial.print(": Raw=");
+        Serial.print(analogValues[i]);
+        Serial.print(", Voltage=");
+        Serial.print(analogVoltages[i], 2); // Display with 2 decimal places
+        Serial.print("V, ");
+        Serial.print(calculatePercentage(analogVoltages[i]));
+        Serial.println("%");
+    }
 
     Serial.println("----------------------------");
 }
@@ -1026,13 +1098,14 @@ void broadcastUpdate() {
         input["state"] = directInputStates[i];
     }
 
-    // Add analog inputs
+    // Add analog inputs with proper voltage and percentage calculations
     JsonArray analog = doc.createNestedArray("analog");
     for (int i = 0; i < 4; i++) {
         JsonObject an = analog.createNestedObject();
         an["id"] = i;
         an["value"] = analogValues[i];
-        an["percentage"] = map(analogValues[i], 0, 4095, 0, 100);
+        an["voltage"] = analogVoltages[i]; // Include the voltage value (0-5V)
+        an["percentage"] = calculatePercentage(analogVoltages[i]); // Percentage based on 0-5V range
     }
 
     // Add system info
@@ -1430,15 +1503,23 @@ bool writeOutputs() {
     return success;
 }
 
-// Read analog input
+// Read analog input and scale for 0-5V range
+// Read analog input with improved noise reduction
 int readAnalogInput(uint8_t index) {
     int pinMapping[] = { ANALOG_PIN_1, ANALOG_PIN_2, ANALOG_PIN_3, ANALOG_PIN_4 };
-
-    if (index < 4) {
-        return analogRead(pinMapping[index]);
+    
+    if (index >= 4) return 0;
+    
+    // Take multiple readings and average them for better stability
+    const int numReadings = 5;
+    int total = 0;
+    
+    for (int i = 0; i < numReadings; i++) {
+        total += analogRead(pinMapping[index]);
+        delay(1);  // Short delay between readings
     }
-
-    return 0;
+    
+    return total / numReadings;
 }
 
 // Save configuration to EEPROM
@@ -1529,17 +1610,21 @@ void loadConfiguration() {
         initializeDefaultConfig();
     }
 
-    // Initialize default schedules
-    for (int i = 0; i < MAX_SCHEDULES; i++) {
-        schedules[i].enabled = false;
-        schedules[i].days = 0;
-        schedules[i].hour = 0;
-        schedules[i].minute = 0;
-        schedules[i].action = 0;
-        schedules[i].targetType = 0;
-        schedules[i].targetId = 0;
-        snprintf(schedules[i].name, 32, "Schedule %d", i + 1);
-    }
+// Initialize default schedules
+for (int i = 0; i < MAX_SCHEDULES; i++) {
+    schedules[i].enabled = false;
+    schedules[i].triggerType = 0;     // Default to time-based
+    schedules[i].days = 0;
+    schedules[i].hour = 0;
+    schedules[i].minute = 0;
+    schedules[i].inputMask = 0;       // No inputs selected
+    schedules[i].inputStates = 0;     // All LOW
+    schedules[i].logic = 0;           // AND logic
+    schedules[i].action = 0;
+    schedules[i].targetType = 0;
+    schedules[i].targetId = 0;
+    snprintf(schedules[i].name, 32, "Schedule %d", i + 1);
+}
 
     // Initialize default analog triggers
     for (int i = 0; i < MAX_ANALOG_TRIGGERS; i++) {
@@ -1566,7 +1651,7 @@ void initializeDefaultConfig() {
 // Web server root handler
 void handleWebRoot() {
     server.sendHeader("Location", "/index.html", true);
-    server.send(302, "text/plain", "");
+        server.send(302, "text/plain", "");
 }
 
 // Handle 404 not found
@@ -1749,14 +1834,15 @@ void handleSystemStatus() {
         output["state"] = outputStates[i];
     }
 
-    // Analog inputs
+    // Analog inputs with voltage values and correct percentage scaling
     JsonArray analog = doc.createNestedArray("analog");
     for (int i = 0; i < 4; i++) {
         JsonObject an = analog.createNestedObject();
         an["id"] = i;
         an["name"] = "A" + String(i + 1);
         an["value"] = analogValues[i];
-        an["percentage"] = map(analogValues[i], 0, 4095, 0, 100);
+        an["voltage"] = analogVoltages[i]; // Include voltage (0-5V)
+        an["percentage"] = calculatePercentage(analogVoltages[i]); // Percentage based on 0-5V full scale
     }
 
     // Diagnostics
@@ -1780,9 +1866,13 @@ void handleSchedules() {
         schedule["id"] = i;
         schedule["enabled"] = schedules[i].enabled;
         schedule["name"] = schedules[i].name;
+        schedule["triggerType"] = schedules[i].triggerType;
         schedule["days"] = schedules[i].days;
         schedule["hour"] = schedules[i].hour;
         schedule["minute"] = schedules[i].minute;
+        schedule["inputMask"] = schedules[i].inputMask;
+        schedule["inputStates"] = schedules[i].inputStates;
+        schedule["logic"] = schedules[i].logic;
         schedule["action"] = schedules[i].action;
         schedule["targetType"] = schedules[i].targetType;
         schedule["targetId"] = schedules[i].targetId;
@@ -1811,12 +1901,22 @@ void handleUpdateSchedule() {
             if (id >= 0 && id < MAX_SCHEDULES) {
                 schedules[id].enabled = scheduleJson["enabled"];
                 strlcpy(schedules[id].name, scheduleJson["name"] | "Schedule", 32);
-                schedules[id].days = scheduleJson["days"];
-                schedules[id].hour = scheduleJson["hour"];
-                schedules[id].minute = scheduleJson["minute"];
-                schedules[id].action = scheduleJson["action"];
-                schedules[id].targetType = scheduleJson["targetType"];
-                schedules[id].targetId = scheduleJson["targetId"];
+                schedules[id].triggerType = scheduleJson["triggerType"] | 0;
+                
+                // Time-based fields
+                schedules[id].days = scheduleJson["days"] | 0;
+                schedules[id].hour = scheduleJson["hour"] | 0;
+                schedules[id].minute = scheduleJson["minute"] | 0;
+                
+                // Input-based fields
+                schedules[id].inputMask = scheduleJson["inputMask"] | 0;
+                schedules[id].inputStates = scheduleJson["inputStates"] | 0;
+                schedules[id].logic = scheduleJson["logic"] | 0;
+                
+                // Common fields
+                schedules[id].action = scheduleJson["action"] | 0;
+                schedules[id].targetType = scheduleJson["targetType"] | 0;
+                schedules[id].targetId = scheduleJson["targetId"] | 0;
 
                 saveConfiguration();
                 response = "{\"status\":\"success\"}";
@@ -2606,11 +2706,13 @@ String processCommand(String command) {
         return response;
     }
     else if (command.startsWith("ANALOG STATUS")) {
-        // Return analog input status
+        // Return analog input status with voltage values
         String response = "ANALOG STATUS:\n";
         for (int i = 0; i < 4; i++) {
             response += String(i + 1) + " (Analog " + String(i + 1) + "): ";
-            response += String(analogValues[i]) + " (" + String(map(analogValues[i], 0, 4095, 0, 100)) + "%)";
+            response += String(analogValues[i]) + " (Raw), ";
+            response += String(analogVoltages[i], 2) + "V, ";
+            response += String(calculatePercentage(analogVoltages[i])) + "% (of 5V scale)";
             response += "\n";
         }
         return response;
@@ -2733,6 +2835,15 @@ String processCommand(String command) {
         response += "Current time: " + getTimeString() + "\n";
         response += "Free heap: " + String(ESP.getFreeHeap()) + " bytes\n";
 
+        // Add analog inputs status with voltage values
+        response += "\nAnalog Inputs (0-5V range):\n";
+        for (int i = 0; i < 4; i++) {
+            response += "A" + String(i + 1) + ": ";
+            response += String(analogValues[i]) + " (Raw), ";
+            response += String(analogVoltages[i], 2) + "V, ";
+            response += String(calculatePercentage(analogVoltages[i])) + "%\n";
+        }
+
         return response;
     }
     else if (command == "HELP") {
@@ -2801,7 +2912,7 @@ String processCommand(String command) {
     return "ERROR: Unknown command. Type HELP for commands.";
 }
 
-// Check schedules against current time
+// Check schedules against current time and input states
 void checkSchedules() {
     // Get current time
     DateTime now;
@@ -2823,57 +2934,154 @@ void checkSchedules() {
     if (currentDay == 0) currentDay = 7;  // Convert Sunday from 0 to 7
     uint8_t currentDayBit = 1 << (currentDay - 1);
 
+    // Array to store previous input states (for edge detection)
+    static uint32_t prevInputState = 0;
+    
+    // Calculate current state of all inputs as a single 32-bit value
+    uint32_t currentInputState = 0;
+    
+    // Add digital inputs (bits 0-15)
+    for (int i = 0; i < 16; i++) {
+        if (inputStates[i]) {
+            currentInputState |= (1UL << i);
+        }
+    }
+    
+    // Add direct inputs HT1-HT3 (bits 16-18)
+    for (int i = 0; i < 3; i++) {
+        if (directInputStates[i]) {
+            currentInputState |= (1UL << (16 + i));
+        }
+    }
+
     // Check each schedule
     for (int i = 0; i < MAX_SCHEDULES; i++) {
         if (schedules[i].enabled) {
-            // Check if this schedule should run today
-            if (schedules[i].days & currentDayBit) {
-                // Check if it's time to run this schedule
-                if (now.hour() == schedules[i].hour && now.minute() == schedules[i].minute && now.second() < 2) {
-                    debugPrintln("Running schedule: " + String(schedules[i].name));
-
-                    // Perform the scheduled action
-                    if (schedules[i].targetType == 0) {
-                        // Single output
-                        uint8_t relay = schedules[i].targetId;
-                        if (relay < 16) {
-                            if (schedules[i].action == 0) {        // OFF
-                                outputStates[relay] = false;
-                            }
-                            else if (schedules[i].action == 1) { // ON
-                                outputStates[relay] = true;
-                            }
-                            else if (schedules[i].action == 2) { // TOGGLE
-                                outputStates[relay] = !outputStates[relay];
-                            }
-                        }
+            bool timeTrigger = false;
+            bool inputTrigger = false;
+            
+            // Check time-based condition (for triggerType 0 or 2)
+            if (schedules[i].triggerType == 0 || schedules[i].triggerType == 2) {
+                // Check if schedule should run today
+                if (schedules[i].days & currentDayBit) {
+                    // Check if it's time to run
+                    if (now.hour() == schedules[i].hour && now.minute() == schedules[i].minute && now.second() < 2) {
+                        timeTrigger = true;
+                        debugPrintln("Time trigger met for schedule: " + String(schedules[i].name));
                     }
-                    else if (schedules[i].targetType == 1) {
-                        // Multiple outputs (using bitmask)
-                        for (int j = 0; j < 16; j++) {
-                            if (schedules[i].targetId & (1 << j)) {
-                                if (schedules[i].action == 0) {        // OFF
-                                    outputStates[j] = false;
-                                }
-                                else if (schedules[i].action == 1) { // ON
-                                    outputStates[j] = true;
-                                }
-                                else if (schedules[i].action == 2) { // TOGGLE
-                                    outputStates[j] = !outputStates[j];
-                                }
-                            }
-                        }
-                    }
-
-                    // Update outputs
-                    writeOutputs();
-
-                    // Broadcast update
-                    broadcastUpdate();
                 }
+            }
+            
+            // Check input-based condition (for triggerType 1 or 2)
+            if (schedules[i].triggerType == 1 || schedules[i].triggerType == 2) {
+                if (schedules[i].inputMask != 0) {
+                    bool inputConditionMet = false;
+                    bool anyInputChanged = false;
+                    
+                    // Check each bit in the inputMask
+                    for (int bitPos = 0; bitPos < 19; bitPos++) {
+                        uint32_t bitMask = 1UL << bitPos;
+                        
+                        // If this bit is part of our input mask, check its state
+                        if (schedules[i].inputMask & bitMask) {
+                            bool desiredState = (schedules[i].inputStates & bitMask) != 0;
+                            bool currentState = (currentInputState & bitMask) != 0;
+                            bool previousState = (prevInputState & bitMask) != 0;
+                            
+                            // Check if this input has changed state
+                            if (currentState != previousState) {
+                                anyInputChanged = true;
+                            }
+                            
+                            // Evaluate condition based on logic
+                            if (schedules[i].logic == 0) { // AND logic
+                                if (currentState != desiredState) {
+                                    inputConditionMet = false;
+                                    break; // Break early for AND logic if one condition fails
+                                }
+                                inputConditionMet = true;
+                            } else { // OR logic
+                                if (currentState == desiredState) {
+                                    inputConditionMet = true;
+                                    break; // Break early for OR logic if one condition is met
+                                }
+                            }
+                        }
+                    }
+                    
+                    // For input trigger, we need at least one input to have changed state
+                    if (inputConditionMet && anyInputChanged) {
+                        inputTrigger = true;
+                        debugPrintln("Input trigger met for schedule: " + String(schedules[i].name));
+                    }
+                }
+            }
+            
+            // Determine if we should execute the schedule based on trigger type
+            bool shouldTrigger = false;
+            
+            switch (schedules[i].triggerType) {
+                case 0: // Time-based only
+                    shouldTrigger = timeTrigger;
+                    break;
+                
+                case 1: // Input-based only
+                    shouldTrigger = inputTrigger;
+                    break;
+                
+                case 2: // Combined (both time and input conditions must be met)
+                    shouldTrigger = timeTrigger && inputTrigger;
+                    break;
+            }
+            
+            // Execute schedule action if triggered
+            if (shouldTrigger) {
+                debugPrintln("Executing schedule: " + String(schedules[i].name));
+                
+                // Perform the scheduled action
+                if (schedules[i].targetType == 0) {
+                    // Single output
+                    uint8_t relay = schedules[i].targetId;
+                    if (relay < 16) {
+                        if (schedules[i].action == 0) {        // OFF
+                            outputStates[relay] = false;
+                        }
+                        else if (schedules[i].action == 1) {   // ON
+                            outputStates[relay] = true;
+                        }
+                        else if (schedules[i].action == 2) {   // TOGGLE
+                            outputStates[relay] = !outputStates[relay];
+                        }
+                    }
+                }
+                else if (schedules[i].targetType == 1) {
+                    // Multiple outputs (using bitmask)
+                    for (int j = 0; j < 16; j++) {
+                        if (schedules[i].targetId & (1 << j)) {
+                            if (schedules[i].action == 0) {        // OFF
+                                outputStates[j] = false;
+                            }
+                            else if (schedules[i].action == 1) {   // ON
+                                outputStates[j] = true;
+                            }
+                            else if (schedules[i].action == 2) {   // TOGGLE
+                                outputStates[j] = !outputStates[j];
+                            }
+                        }
+                    }
+                }
+
+                // Update outputs
+                writeOutputs();
+
+                // Broadcast update
+                broadcastUpdate();
             }
         }
     }
+    
+    // Update previous input state for the next iteration
+    prevInputState = currentInputState;
 }
 
 // Check analog triggers against current values
