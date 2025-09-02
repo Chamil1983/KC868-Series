@@ -936,6 +936,111 @@ input:checked + .slider:before {
     to { opacity: 0; }
 }
 
+/* Mobile-friendly modal improvements */
+@media (max-width: 768px) {
+    .modal-content {
+        margin: 5% auto;
+        padding: 15px;
+        width: 95%;
+        max-height: 85vh;
+        overflow-y: auto;
+    }
+    
+    /* Make form elements easier to tap on mobile */
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group input[type="time"],
+    .form-group input[type="datetime-local"],
+    .form-group select {
+        padding: 12px 8px;
+        font-size: 16px; /* Prevents iOS zoom on focus */
+    }
+    
+    /* Ensure form actions (buttons) are always visible at bottom */
+    .form-actions {
+        position: sticky;
+        bottom: 0;
+        background-color: white;
+        padding: 15px 0 5px 0;
+        margin-top: 15px;
+        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        z-index: 10;
+    }
+    
+    /* Make buttons bigger for touch interaction */
+    .form-actions .btn {
+        padding: 12px 20px;
+        font-size: 16px;
+    }
+    
+    /* Improve modal layout for touchscreens */
+    #schedule-modal .close-modal {
+        font-size: 30px;
+        top: 10px;
+        right: 15px;
+    }
+    
+    /* Adjust time and input sections to be full-width on mobile */
+    #schedule-modal.combined-view #time-trigger-section,
+    #schedule-modal.combined-view #input-trigger-section {
+        width: 100%;
+        display: block;
+        margin-right: 0;
+    }
+    
+    /* Adjust days selector to be more touch-friendly */
+    .days-selector {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+    }
+    
+    .days-selector label {
+        padding: 8px 0;
+    }
+    
+    /* Adjust checkbox grid for better spacing */
+    .checkbox-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    
+    /* Make input containers more tap-friendly */
+    .input-container {
+        padding: 8px;
+        margin-bottom: 10px;
+    }
+    
+    /* Add some spacing to input state selects */
+    .input-state-select {
+        margin-top: 5px;
+        padding: 8px;
+        width: 100%;
+    }
+}
+
+/* Fix for non-scrollable modal on iOS */
+.modal {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Make modal content scrollable but maintain fixed position */
+.modal-content {
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* Additional fix for schedule modal specifically */
+#schedule-modal .modal-content {
+    padding-bottom: 80px; /* Extra padding to ensure content doesn't get hidden behind sticky buttons */
+}
+
+/* Improved focus visibility for accessibility */
+.form-group input:focus,
+.form-group select:focus {
+    outline: 2px solid #2196F3;
+    outline-offset: 2px;
+}
+
 /* Responsive styles */
 @media (max-width: 768px) {
     .container {
@@ -1001,4 +1106,85 @@ input:checked + .slider:before {
 
 #schedule-modal.combined-view #time-trigger-section {
     margin-right: 2%;
+}
+
+/* Add to your style.css file */
+.priority-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.high-priority {
+    background-color: #F44336; /* Red */
+}
+
+.medium-priority {
+    background-color: #FF9800; /* Orange */
+}
+
+.low-priority {
+    background-color: #2196F3; /* Blue */
+}
+
+.no-priority {
+    background-color: #9E9E9E; /* Grey */
+}
+
+.priority-description {
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border: 1px solid #ddd;
+}
+
+.interrupts-container {
+    margin-top: 15px;
+}
+
+/* Ensure the navigation includes the new section */
+nav ul li a[data-section="input-interrupts"] {
+    /* Same styling as your other navigation items */
+}
+
+/* Add these styles to style.css for the trigger type badges */
+.trigger-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.trigger-rising {
+    background-color: #2196F3; /* Blue */
+}
+
+.trigger-falling {
+    background-color: #673AB7; /* Deep Purple */
+}
+
+.trigger-change {
+    background-color: #009688; /* Teal */
+}
+
+.trigger-high {
+    background-color: #4CAF50; /* Green */
+}
+
+.trigger-low {
+    background-color: #FF5722; /* Deep Orange */
+}
+
+.trigger-description {
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border: 1px solid #ddd;
 }

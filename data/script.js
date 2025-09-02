@@ -1076,6 +1076,7 @@ function createVisualAnalogGrid() {
 }
 
 // Initialize Schedule UI - Fixed to properly show the Add Schedule button and handle events
+// Modified part of the initScheduleUI function for input checkboxes
 function initScheduleUI() {
     console.log("Initializing Schedule UI");
     
@@ -1162,7 +1163,7 @@ function initScheduleUI() {
         }
     }
     
-    // Fill input checkboxes with state selects
+    // Fill input checkboxes with state selects - FIXED VERSION
     const inputCheckboxes = document.getElementById('input-checkboxes');
     if (inputCheckboxes) {
         inputCheckboxes.innerHTML = '';
@@ -1198,7 +1199,7 @@ function initScheduleUI() {
         }
     }
     
-    // Fill HT input checkboxes with state selects
+    // Fill HT input checkboxes with state selects - FIXED VERSION
     const htInputCheckboxes = document.getElementById('ht-input-checkboxes');
     if (htInputCheckboxes) {
         htInputCheckboxes.innerHTML = '';
@@ -1394,6 +1395,7 @@ function formatInputTriggerText(inputMask, inputStates, logic) {
 }
 
 // Enhanced open schedule modal function
+// Enhanced open schedule modal function with better day selection handling
 function openScheduleModal(scheduleId = null) {
     console.log("Opening schedule modal, id:", scheduleId);
     const modal = document.getElementById('schedule-modal');
@@ -1402,14 +1404,22 @@ function openScheduleModal(scheduleId = null) {
         return;
     }
     
+    // For mobile: scroll to top of modal when opening
     modal.style.display = 'block';
+    
+    // Reset scroll position when opening modal
+    if (modal.querySelector('.modal-content')) {
+        modal.querySelector('.modal-content').scrollTop = 0;
+    }
     
     // Reset form
     document.getElementById('schedule-form').reset();
     document.getElementById('schedule-id').value = '';
     
-    // Reset day checkboxes
-    document.querySelectorAll('.days-selector input[type="checkbox"]').forEach(checkbox => {
+    // Reset day checkboxes - ensure all checkboxes are found and reset
+    const dayCheckboxes = document.querySelectorAll('.days-selector input[type="checkbox"]');
+    console.log(`Found ${dayCheckboxes.length} day checkboxes`);
+    dayCheckboxes.forEach(checkbox => {
         checkbox.checked = false;
     });
     
@@ -1417,16 +1427,22 @@ function openScheduleModal(scheduleId = null) {
     document.querySelectorAll('#input-checkboxes input[type="checkbox"]').forEach(checkbox => {
         checkbox.checked = false;
         // Reset the state select
-        const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
-        if (stateSelect) stateSelect.value = '0';
+        const stateSelect = checkbox.closest('.input-container').querySelector('.input-state-select');
+        if (stateSelect) {
+            stateSelect.value = '0';
+            stateSelect.style.display = 'none';
+        }
     });
     
     // Reset HT input checkboxes if they exist
     document.querySelectorAll('#ht-input-checkboxes input[type="checkbox"]').forEach(checkbox => {
         checkbox.checked = false;
         // Reset the state select
-        const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
-        if (stateSelect) stateSelect.value = '0';
+        const stateSelect = checkbox.closest('.input-container').querySelector('.input-state-select');
+        if (stateSelect) {
+            stateSelect.value = '0';
+            stateSelect.style.display = 'none';
+        }
     });
     
     // Reset multiple targets
@@ -1442,105 +1458,161 @@ function openScheduleModal(scheduleId = null) {
     document.getElementById('single-target').style.display = 'block';
     document.getElementById('multiple-targets').style.display = 'none';
     
+    // If editing an existing schedule
     if (scheduleId !== null) {
-        // Load schedule data
+        console.log("Loading schedule:", scheduleId);
+        
+        // Fetch the schedule data
         fetch(`/api/schedules?id=${scheduleId}`)
             .then(response => response.json())
             .then(data => {
-                const schedule = data.schedule;
-                
-                document.getElementById('schedule-id').value = schedule.id;
-                document.getElementById('schedule-enabled').checked = schedule.enabled;
-                document.getElementById('schedule-name').value = schedule.name;
-                document.getElementById('schedule-trigger-type').value = schedule.triggerType;
-                
-                // Update visible sections based on trigger type
-                updateVisibleTriggerSections(schedule.triggerType);
-                
-                // Set time-based fields
-                if (schedule.triggerType === 0 || schedule.triggerType === 2) {
-                    // Set days
-                    for (let i = 0; i < 7; i++) {
-                        const checkbox = document.querySelector(`.days-selector input[data-day="${i}"]`);
-                        if (checkbox) {
-                            checkbox.checked = !!(schedule.days & (1 << i));
-                        }
-                    }
-                    
-                    // Set time
-                    const hour = schedule.hour.toString().padStart(2, '0');
-                    const minute = schedule.minute.toString().padStart(2, '0');
-                    document.getElementById('schedule-time').value = `${hour}:${minute}`;
-                }
-                
-                // Set input-based fields
-                if (schedule.triggerType === 1 || schedule.triggerType === 2) {
-                    // Set input logic
-                    document.getElementById('schedule-input-logic').value = schedule.logic;
-                    
-                    // Set digital input checkboxes
-                    for (let i = 0; i < 16; i++) {
-                        const checkbox = document.querySelector(`#input-checkboxes input[data-input="${i}"]`);
-                        if (checkbox) {
-                            const isChecked = !!(schedule.inputMask & (1 << i));
-                            checkbox.checked = isChecked;
+                const schedules = data.schedules;
+                if (schedules && schedules.length > 0) {
+                    // Find the schedule with matching ID
+                    const schedule = schedules.find(s => s.id === parseInt(scheduleId));
+                    if (schedule) {
+                        console.log("Schedule data loaded:", schedule);
+                        
+                        // Set form values from schedule data
+                        document.getElementById('schedule-id').value = schedule.id;
+                        document.getElementById('schedule-enabled').checked = schedule.enabled;
+                        document.getElementById('schedule-name').value = schedule.name;
+                        document.getElementById('schedule-trigger-type').value = schedule.triggerType;
+                        document.getElementById('schedule-action').value = schedule.action;
+                        document.getElementById('schedule-target-type').value = schedule.targetType;
+                        
+                        // Set time fields if applicable
+                        if (schedule.triggerType === 0 || schedule.triggerType === 2) {
+                            // Set day checkboxes - ensure proper day bit conversion
+                            console.log("Setting day checkboxes with day value:", schedule.days);
+                            for (let i = 0; i < 7; i++) {
+                                const dayBit = (1 << i);
+                                const checkbox = document.querySelector(`.days-selector input[data-day="${i}"]`);
+                                if (checkbox) {
+                                    checkbox.checked = (schedule.days & dayBit) !== 0;
+                                    console.log(`Day ${i}: bit ${dayBit}, checked: ${(schedule.days & dayBit) !== 0}`);
+                                }
+                            }
                             
-                            // Set the state
-                            const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
-                            if (stateSelect) {
-                                stateSelect.value = (schedule.inputStates & (1 << i)) ? '1' : '0';
-                                stateSelect.style.display = isChecked ? 'inline-block' : 'none';
+                            // Set time with proper padding
+                            const hour = schedule.hour.toString().padStart(2, '0');
+                            const minute = schedule.minute.toString().padStart(2, '0');
+                            document.getElementById('schedule-time').value = `${hour}:${minute}`;
+                        }
+                        
+                        // Set input fields if applicable
+                        if (schedule.triggerType === 1 || schedule.triggerType === 2) {
+                            // Set input logic
+                            document.getElementById('schedule-input-logic').value = schedule.logic;
+                            
+                            // Set digital input checkboxes
+                            for (let i = 0; i < 16; i++) {
+                                if (schedule.inputMask & (1 << i)) {
+                                    const checkbox = document.querySelector(`#input-checkboxes input[data-input="${i}"]`);
+                                    if (checkbox) {
+                                        checkbox.checked = true;
+                                        
+                                        // Set the state select to visible and set its value
+                                        const container = checkbox.closest('.input-container');
+                                        if (container) {
+                                            const stateSelect = container.querySelector('.input-state-select');
+                                            if (stateSelect) {
+                                                stateSelect.style.display = 'inline-block';
+                                                stateSelect.value = (schedule.inputStates & (1 << i)) !== 0 ? '1' : '0';
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Set HT input checkboxes
+                            for (let i = 0; i < 3; i++) {
+                                const bitPos = i + 16;
+                                if (schedule.inputMask & (1 << bitPos)) {
+                                    const checkbox = document.querySelector(`#ht-input-checkboxes input[data-input="${bitPos}"]`);
+                                    if (checkbox) {
+                                        checkbox.checked = true;
+                                        
+                                        // Set the state select to visible and set its value
+                                        const container = checkbox.closest('.input-container');
+                                        if (container) {
+                                            const stateSelect = container.querySelector('.input-state-select');
+                                            if (stateSelect) {
+                                                stateSelect.style.display = 'inline-block';
+                                                stateSelect.value = (schedule.inputStates & (1 << bitPos)) !== 0 ? '1' : '0';
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
-                    
-                    // Set HT input checkboxes
-                    for (let i = 0; i < 3; i++) {
-                        const bitPos = i + 16; // HT inputs are stored at bits 16-18
-                        const checkbox = document.querySelector(`#ht-input-checkboxes input[data-input="${bitPos}"]`);
-                        if (checkbox) {
-                            const isChecked = !!(schedule.inputMask & (1 << bitPos));
-                            checkbox.checked = isChecked;
+                        
+                        // Show/hide sections based on trigger type
+                        updateVisibleTriggerSections(schedule.triggerType);
+                        
+                        // Set target
+                        if (schedule.targetType === 0) {
+                            // Single relay
+                            document.getElementById('single-target').style.display = 'block';
+                            document.getElementById('multiple-targets').style.display = 'none';
+                            document.getElementById('schedule-target-id').value = schedule.targetId;
+                        } else {
+                            // Multiple relays
+                            document.getElementById('single-target').style.display = 'none';
+                            document.getElementById('multiple-targets').style.display = 'block';
                             
-                            // Set the state
-                            const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
-                            if (stateSelect) {
-                                stateSelect.value = (schedule.inputStates & (1 << bitPos)) ? '1' : '0';
-                                stateSelect.style.display = isChecked ? 'inline-block' : 'none';
+                            // Set relay checkboxes
+                            for (let i = 0; i < 16; i++) {
+                                const checkbox = document.querySelector(`#relay-checkboxes input[data-relay="${i}"]`);
+                                if (checkbox) {
+                                    checkbox.checked = (schedule.targetId & (1 << i)) !== 0;
+                                }
                             }
                         }
+                    } else {
+                        console.error("Schedule with ID", scheduleId, "not found");
                     }
-                }
-                
-                // Set common fields
-                document.getElementById('schedule-action').value = schedule.action;
-                document.getElementById('schedule-target-type').value = schedule.targetType;
-                
-                if (schedule.targetType === 0) {
-                    // Single target
-                    document.getElementById('single-target').style.display = 'block';
-                    document.getElementById('multiple-targets').style.display = 'none';
-                    document.getElementById('schedule-target-id').value = schedule.targetId;
                 } else {
-                    // Multiple targets
-                    document.getElementById('single-target').style.display = 'none';
-                    document.getElementById('multiple-targets').style.display = 'block';
-                    
-                    // Set checkboxes
-                    for (let i = 0; i < 16; i++) {
-                        const checkbox = document.querySelector(`#relay-checkboxes input[data-relay="${i}"]`);
-                        if (checkbox) {
-                            checkbox.checked = !!(schedule.targetId & (1 << i));
-                        }
-                    }
+                    console.error("No schedules returned from API");
                 }
             })
             .catch(error => {
                 console.error('Error loading schedule:', error);
-                showToast('Failed to load schedule details', 'error');
+                showToast('Failed to load schedule data', 'error');
             });
     }
 }
+
+// Add this function to your initialization code
+function setupModalScrollFix() {
+    // For iOS devices - fix modal scrolling issues
+    const modalContents = document.querySelectorAll('.modal-content');
+    modalContents.forEach(content => {
+        content.addEventListener('touchstart', function(e) {
+            if (e.target === this) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    });
+    
+    // Close modal if clicked outside content area
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.style.display = 'none';
+            }
+        });
+    });
+}
+
+// Call this function after the DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Your existing code...
+    
+    // Add this line to initialize modal scroll fixes
+    setupModalScrollFix();
+});
 
 // Function to update visible sections based on trigger type
 function updateVisibleTriggerSections(triggerType) {
@@ -1564,9 +1636,10 @@ function updateVisibleTriggerSections(triggerType) {
 }
 
 // Enhanced save schedule function
+// Enhanced save schedule function with better days handling
 function saveSchedule() {
     const scheduleId = document.getElementById('schedule-id').value;
-    const isNew = !scheduleId;
+    const isNew = scheduleId === '';
     
     // Get trigger type
     const triggerType = parseInt(document.getElementById('schedule-trigger-type').value);
@@ -1581,18 +1654,25 @@ function saveSchedule() {
     
     // Process time-based fields if applicable
     if (triggerType === 0 || triggerType === 2) {
-        // Calculate days bitmask
-        document.querySelectorAll('.days-selector input[type="checkbox"]:checked').forEach(checkbox => {
+        // Calculate days bitmask - ensure all checkboxes are found
+        const dayCheckboxes = document.querySelectorAll('.days-selector input[type="checkbox"]:checked');
+        console.log(`Found ${dayCheckboxes.length} checked day checkboxes`);
+        
+        dayCheckboxes.forEach(checkbox => {
             const day = parseInt(checkbox.getAttribute('data-day'));
             days |= (1 << day);
+            console.log(`Adding day ${day}, bit value ${(1 << day)}, new days value: ${days}`);
         });
         
         // Get time
         const timeValue = document.getElementById('schedule-time').value;
-        const timeParts = timeValue.split(':').map(Number);
-        if (timeParts.length === 2) {
-            hour = timeParts[0];
-            minute = timeParts[1];
+        if (timeValue) {
+            const timeParts = timeValue.split(':').map(Number);
+            if (timeParts.length === 2) {
+                hour = timeParts[0];
+                minute = timeParts[1];
+                console.log(`Set time to ${hour}:${minute}`);
+            }
         }
     }
     
@@ -1606,10 +1686,13 @@ function saveSchedule() {
             const inputId = parseInt(checkbox.getAttribute('data-input'));
             inputMask |= (1 << inputId);
             
-            // Get desired state
-            const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
-            if (stateSelect && stateSelect.value === '1') {
-                inputStates |= (1 << inputId); // Set to HIGH
+            // Get desired state - ensure we find the state select properly
+            const container = checkbox.closest('.input-container');
+            if (container) {
+                const stateSelect = container.querySelector('.input-state-select');
+                if (stateSelect && stateSelect.value === '1') {
+                    inputStates |= (1 << inputId); // Set to HIGH
+                }
             }
         });
         
@@ -1618,10 +1701,13 @@ function saveSchedule() {
             const inputId = parseInt(checkbox.getAttribute('data-input'));
             inputMask |= (1 << inputId);
             
-            // Get desired state
-            const stateSelect = checkbox.parentNode.querySelector('.input-state-select');
-            if (stateSelect && stateSelect.value === '1') {
-                inputStates |= (1 << inputId); // Set to HIGH
+            // Get desired state - ensure we find the state select properly
+            const container = checkbox.closest('.input-container');
+            if (container) {
+                const stateSelect = container.querySelector('.input-state-select');
+                if (stateSelect && stateSelect.value === '1') {
+                    inputStates |= (1 << inputId); // Set to HIGH
+                }
             }
         });
     }
@@ -1645,7 +1731,7 @@ function saveSchedule() {
     const schedule = {
         id: scheduleId ? parseInt(scheduleId) : null,
         enabled: document.getElementById('schedule-enabled').checked,
-        name: document.getElementById('schedule-name').value,
+        name: document.getElementById('schedule-name').value || `Schedule ${new Date().getTime()}`,
         triggerType: triggerType,
         days: days,
         hour: hour,
@@ -1658,6 +1744,23 @@ function saveSchedule() {
         targetId: targetId
     };
     
+    console.log("Saving schedule:", schedule);
+    
+    // Validate time-based schedule has at least one day selected
+    if ((triggerType === 0 || triggerType === 2) && days === 0) {
+        showToast('Please select at least one day for time-based schedule', 'warning');
+        return;
+    }
+    
+    // Validate input-based schedule has at least one input selected
+    if ((triggerType === 1 || triggerType === 2) && inputMask === 0) {
+        showToast('Please select at least one input for input-based schedule', 'warning');
+        return;
+    }
+    
+    // Show saving message
+    showToast('Saving schedule...', 'info');
+    
     // Save to server
     fetch('/api/schedules', {
         method: 'POST',
@@ -1666,11 +1769,23 @@ function saveSchedule() {
         },
         body: JSON.stringify({ schedule: schedule })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.status === 'success') {
-            document.getElementById('schedule-modal').style.display = 'none';
-            showToast(`Schedule ${isNew ? 'created' : 'updated'} successfully`);
+            // Always explicitly hide the modal, regardless of trigger type
+            const modal = document.getElementById('schedule-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+            
+            showToast(`Schedule ${isNew ? 'created' : 'updated'} successfully`, 'success');
+            
+            // Refresh the schedules table
             fetchSchedules();
         } else {
             showToast(`Failed to ${isNew ? 'create' : 'update'} schedule: ${data.message}`, 'error');
@@ -1683,8 +1798,173 @@ function saveSchedule() {
 }
 
 // Global functions for schedule management
+// Enhanced editSchedule function
 window.editSchedule = function(scheduleId) {
-    openScheduleModal(scheduleId);
+    console.log("Editing schedule:", scheduleId);
+    const modal = document.getElementById('schedule-modal');
+    if (!modal) {
+        console.error("Schedule modal not found!");
+        return;
+    }
+    
+    // For mobile: scroll to top of modal when opening
+    modal.style.display = 'block';
+    
+    // Reset scroll position when opening modal
+    if (modal.querySelector('.modal-content')) {
+        modal.querySelector('.modal-content').scrollTop = 0;
+    }
+    
+    // Reset form
+    document.getElementById('schedule-form').reset();
+    document.getElementById('schedule-id').value = scheduleId;
+    
+    // Reset day checkboxes
+    document.querySelectorAll('.days-selector input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // Reset input checkboxes
+    document.querySelectorAll('#input-checkboxes input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+        // Reset the state select
+        const container = checkbox.closest('.input-container');
+        if (container) {
+            const stateSelect = container.querySelector('.input-state-select');
+            if (stateSelect) {
+                stateSelect.value = '0';
+                stateSelect.style.display = 'none';
+            }
+        }
+    });
+    
+    // Reset HT input checkboxes
+    document.querySelectorAll('#ht-input-checkboxes input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+        // Reset the state select
+        const container = checkbox.closest('.input-container');
+        if (container) {
+            const stateSelect = container.querySelector('.input-state-select');
+            if (stateSelect) {
+                stateSelect.value = '0';
+                stateSelect.style.display = 'none';
+            }
+        }
+    });
+    
+    // Reset relay checkboxes
+    document.querySelectorAll('#relay-checkboxes input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // Fetch schedule data
+    fetch(`/api/schedules?id=${scheduleId}`)
+        .then(response => response.json())
+        .then(data => {
+            const schedules = data.schedules;
+            if (schedules && schedules.length > 0) {
+                // Find the schedule with matching ID
+                const schedule = schedules.find(s => s.id === parseInt(scheduleId));
+                if (schedule) {
+                    // Set form values from schedule data
+                    document.getElementById('schedule-name').value = schedule.name;
+                    document.getElementById('schedule-enabled').checked = schedule.enabled;
+                    document.getElementById('schedule-trigger-type').value = schedule.triggerType;
+                    document.getElementById('schedule-action').value = schedule.action;
+                    document.getElementById('schedule-target-type').value = schedule.targetType;
+                    
+                    // Set time fields if applicable
+                    if (schedule.triggerType === 0 || schedule.triggerType === 2) {
+                        // Set day checkboxes
+                        for (let i = 0; i < 7; i++) {
+                            const checkbox = document.querySelector(`.days-selector input[data-day="${i}"]`);
+                            if (checkbox) {
+                                checkbox.checked = (schedule.days & (1 << i)) !== 0;
+                            }
+                        }
+                        
+                        // Set time
+                        const hour = schedule.hour.toString().padStart(2, '0');
+                        const minute = schedule.minute.toString().padStart(2, '0');
+                        document.getElementById('schedule-time').value = `${hour}:${minute}`;
+                    }
+                    
+                    // Set input fields if applicable
+                    if (schedule.triggerType === 1 || schedule.triggerType === 2) {
+                        // Set input logic
+                        document.getElementById('schedule-input-logic').value = schedule.logic;
+                        
+                        // Set digital input checkboxes
+                        for (let i = 0; i < 16; i++) {
+                            if (schedule.inputMask & (1 << i)) {
+                                const checkbox = document.querySelector(`#input-checkboxes input[data-input="${i}"]`);
+                                if (checkbox) {
+                                    checkbox.checked = true;
+                                    
+                                    // Set the state select to visible and set its value
+                                    const container = checkbox.closest('.input-container');
+                                    if (container) {
+                                        const stateSelect = container.querySelector('.input-state-select');
+                                        if (stateSelect) {
+                                            stateSelect.style.display = 'inline-block';
+                                            stateSelect.value = (schedule.inputStates & (1 << i)) !== 0 ? '1' : '0';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Set HT input checkboxes
+                        for (let i = 0; i < 3; i++) {
+                            const bitPos = i + 16;
+                            if (schedule.inputMask & (1 << bitPos)) {
+                                const checkbox = document.querySelector(`#ht-input-checkboxes input[data-input="${bitPos}"]`);
+                                if (checkbox) {
+                                    checkbox.checked = true;
+                                    
+                                    // Set the state select to visible and set its value
+                                    const container = checkbox.closest('.input-container');
+                                    if (container) {
+                                        const stateSelect = container.querySelector('.input-state-select');
+                                        if (stateSelect) {
+                                            stateSelect.style.display = 'inline-block';
+                                            stateSelect.value = (schedule.inputStates & (1 << bitPos)) !== 0 ? '1' : '0';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Show/hide sections based on trigger type
+                    updateVisibleTriggerSections(schedule.triggerType);
+                    
+                    // Set target
+                    if (schedule.targetType === 0) {
+                        // Single relay
+                        document.getElementById('single-target').style.display = 'block';
+                        document.getElementById('multiple-targets').style.display = 'none';
+                        document.getElementById('schedule-target-id').value = schedule.targetId;
+                    } else {
+                        // Multiple relays
+                        document.getElementById('single-target').style.display = 'none';
+                        document.getElementById('multiple-targets').style.display = 'block';
+                        
+                        // Set relay checkboxes
+                        for (let i = 0; i < 16; i++) {
+                            const checkbox = document.querySelector(`#relay-checkboxes input[data-relay="${i}"]`);
+                            if (checkbox) {
+                                checkbox.checked = (schedule.targetId & (1 << i)) !== 0;
+                            }
+                        }
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading schedule:', error);
+            showToast('Failed to load schedule data', 'error');
+        });
 };
 
 window.deleteSchedule = function(scheduleId) {
@@ -3276,6 +3556,8 @@ function checkDeviceOnline() {
 
 // Control a relay
 function controlRelay(relayId, state) {
+    console.log(`Controlling relay ${relayId} - setting to ${state ? "ON" : "OFF"}`);
+    
     fetch('/api/relay', {
         method: 'POST',
         headers: {
@@ -3286,13 +3568,18 @@ function controlRelay(relayId, state) {
             state: state
         })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.status === 'success') {
             showToast(`Relay ${parseInt(relayId) + 1} ${state ? 'ON' : 'OFF'}`);
             updateRelayState(relayId, state);
         } else {
-            showToast(`Failed to control relay ${parseInt(relayId) + 1}`, 'error');
+            showToast(`Failed to control relay ${parseInt(relayId) + 1}: ${data.message}`, 'error');
             
             // Reset toggle to match actual state
             const toggleSwitch = document.querySelector(`.relay-toggle[data-relay="${relayId}"]`);
@@ -3421,3 +3708,308 @@ function showToast(message, type = 'info') {
         toast.className = 'toast';
     }, 3000);
 }
+
+// Add to your navigation click handler or initialization function
+// Initialize interrupts UI
+function initInterruptsUI() {
+    // Load interrupts configurations
+    fetchInterrupts();
+    
+    // Setup modal close buttons if they exist
+    const interruptModal = document.getElementById('interrupt-modal');
+    if (interruptModal) {
+        document.querySelectorAll('#interrupt-modal .close-modal, #interrupt-modal .close-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                interruptModal.style.display = 'none';
+            });
+        });
+    }
+    
+    // Setup form submission if it exists
+    const interruptForm = document.getElementById('interrupt-form');
+    if (interruptForm) {
+        interruptForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveInterrupt();
+        });
+    }
+    
+    // Setup "Configure All" button
+    const configureAllBtn = document.getElementById('configure-all-interrupts');
+    if (configureAllBtn) {
+        configureAllBtn.addEventListener('click', configureAllInterrupts);
+    }
+    
+    // Setup enable/disable all buttons
+    const enableAllBtn = document.getElementById('enable-all-interrupts');
+    if (enableAllBtn) {
+        enableAllBtn.addEventListener('click', function() {
+            enableAllInterrupts(true);
+        });
+    }
+    
+    const disableAllBtn = document.getElementById('disable-all-interrupts');
+    if (disableAllBtn) {
+        disableAllBtn.addEventListener('click', function() {
+            enableAllInterrupts(false);
+        });
+    }
+}
+
+// Fetch interrupts configurations
+function fetchInterrupts() {
+    fetch('/api/interrupts')
+        .then(response => response.json())
+        .then(data => {
+            renderInterruptsTable(data.interrupts);
+        })
+        .catch(error => {
+            console.error('Error fetching interrupts:', error);
+            showToast('Failed to load interrupt configurations', 'error');
+        });
+}
+
+// Render interrupts table
+// Modify the renderInterruptsTable function to include trigger types
+function renderInterruptsTable(interrupts) {
+    const tableBody = document.querySelector('#interrupts-table tbody');
+    if (!tableBody) return;
+    
+    tableBody.innerHTML = '';
+    
+    if (!interrupts || interrupts.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="5" class="text-center">No interrupt configurations found</td>';
+        tableBody.appendChild(row);
+        return;
+    }
+    
+    interrupts.forEach(interrupt => {
+        const row = document.createElement('tr');
+        
+        // Format priority
+        const priorities = ['None', 'High', 'Medium', 'Low'];
+        let priorityClass = '';
+        switch(interrupt.priority) {
+            case 1: priorityClass = 'high-priority'; break;
+            case 2: priorityClass = 'medium-priority'; break;
+            case 3: priorityClass = 'low-priority'; break;
+            default: priorityClass = 'no-priority';
+        }
+        
+        // Format trigger type
+        const triggerTypes = ['Rising Edge', 'Falling Edge', 'Change', 'High Level', 'Low Level'];
+        let triggerClass = '';
+        switch(interrupt.triggerType) {
+            case 0: triggerClass = 'trigger-rising'; break;
+            case 1: triggerClass = 'trigger-falling'; break;
+            case 2: triggerClass = 'trigger-change'; break;
+            case 3: triggerClass = 'trigger-high'; break;
+            case 4: triggerClass = 'trigger-low'; break;
+        }
+        
+        row.innerHTML = `
+            <td><input type="checkbox" ${interrupt.enabled ? 'checked' : ''} onchange="toggleInterrupt(${interrupt.id}, this.checked)"></td>
+            <td>${interrupt.name}</td>
+            <td><span class="priority-badge ${priorityClass}">${priorities[interrupt.priority]}</span></td>
+            <td><span class="trigger-badge ${triggerClass}">${triggerTypes[interrupt.triggerType || 2]}</span></td>
+            <td>Input ${interrupt.inputIndex + 1}</td>
+            <td>
+                <button class="btn btn-secondary btn-sm" onclick="editInterrupt(${interrupt.id})"><i class="fa fa-edit"></i> Configure</button>
+            </td>
+        `;
+        
+        tableBody.appendChild(row);
+    });
+}
+
+
+// Open interrupt configuration modal
+// Update the openInterruptModal function to include trigger type
+function openInterruptModal(interruptId = null) {
+    const modal = document.getElementById('interrupt-modal');
+    if (!modal) return;
+    
+    modal.style.display = 'block';
+    
+    // Reset form
+    document.getElementById('interrupt-form').reset();
+    document.getElementById('interrupt-id').value = '';
+    
+    if (interruptId !== null) {
+        // Load interrupt data
+        fetch(`/api/interrupts?id=${interruptId}`)
+            .then(response => response.json())
+            .then(data => {
+                const interrupt = data.interrupt;
+                
+                document.getElementById('interrupt-id').value = interrupt.id;
+                document.getElementById('interrupt-enabled').checked = interrupt.enabled;
+                document.getElementById('interrupt-name').value = interrupt.name;
+                document.getElementById('interrupt-priority').value = interrupt.priority;
+                document.getElementById('interrupt-input').value = interrupt.inputIndex;
+                document.getElementById('interrupt-trigger-type').value = interrupt.triggerType || 2; // Default to CHANGE if not set
+            })
+            .catch(error => {
+                console.error('Error loading interrupt configuration:', error);
+                showToast('Failed to load interrupt configuration details', 'error');
+            });
+    }
+}
+
+
+// Save interrupt configuration
+// Update the saveInterrupt function to include trigger type
+function saveInterrupt() {
+    const interruptId = document.getElementById('interrupt-id').value;
+    const isNew = !interruptId;
+    
+    // Create interrupt object
+    const interrupt = {
+        id: interruptId ? parseInt(interruptId) : null,
+        enabled: document.getElementById('interrupt-enabled').checked,
+        name: document.getElementById('interrupt-name').value,
+        priority: parseInt(document.getElementById('interrupt-priority').value),
+        inputIndex: parseInt(document.getElementById('interrupt-input').value),
+        triggerType: parseInt(document.getElementById('interrupt-trigger-type').value)
+    };
+    
+    // Save to server
+    fetch('/api/interrupts', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ interrupt: interrupt })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            document.getElementById('interrupt-modal').style.display = 'none';
+            showToast(`Interrupt configuration ${isNew ? 'created' : 'updated'} successfully`);
+            fetchInterrupts();
+        } else {
+            showToast(`Failed to ${isNew ? 'create' : 'update'} interrupt configuration: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving interrupt configuration:', error);
+        showToast(`Network error. Could not ${isNew ? 'create' : 'update'} interrupt configuration`, 'error');
+    });
+}
+
+// Toggle interrupt enabled state
+function toggleInterrupt(id, enabled) {
+    fetch('/api/interrupts', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+            id: id,
+            enabled: enabled
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast(`Interrupt ${enabled ? 'enabled' : 'disabled'}`);
+        } else {
+            showToast(`Failed to update interrupt: ${data.message}`, 'error');
+            fetchInterrupts(); // Refresh to get actual state
+        }
+    })
+    .catch(error => {
+        console.error('Error toggling interrupt:', error);
+        showToast('Network error. Could not update interrupt', 'error');
+        fetchInterrupts(); // Refresh to get actual state
+    });
+}
+
+// Configure interrupt
+function editInterrupt(id) {
+    openInterruptModal(id);
+}
+
+// Configure all interrupts at once
+function configureAllInterrupts() {
+    // You can implement a batch configuration UI here
+    showToast('Batch configuration feature coming soon', 'info');
+}
+
+// Enable or disable all interrupts
+function enableAllInterrupts(enable) {
+    fetch('/api/interrupts', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+            action: enable ? 'enable_all' : 'disable_all'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast(data.message || `All interrupts ${enable ? 'enabled' : 'disabled'}`);
+            fetchInterrupts(); // Refresh the table
+        } else {
+            showToast(`Failed to ${enable ? 'enable' : 'disable'} interrupts: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error(`Error ${enable ? 'enabling' : 'disabling'} all interrupts:`, error);
+        showToast('Network error. Operation failed', 'error');
+    });
+}
+
+// Add to your initialization function to call initInterruptsUI
+document.addEventListener('DOMContentLoaded', function() {
+    // Existing init code...
+    initInterruptsUI();
+});
+
+// Add this function to automatically sync time
+function autoSyncTimeFromBrowser() {
+    const now = new Date();
+    
+    const timeData = {
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+        day: now.getDate(),
+        hour: now.getHours(),
+        minute: now.getMinutes(),
+        second: now.getSeconds()
+    };
+    
+    // Send time to the device
+    fetch('/api/time', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(timeData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            console.log('Device time automatically synced with browser time');
+        } else {
+            console.error('Failed to auto-sync time:', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error auto-syncing time:', error);
+    });
+}
+
+// Call this function when the app initializes
+document.addEventListener('DOMContentLoaded', function() {
+    // Existing init code...
+    
+    // Auto sync time when the app loads
+    setTimeout(autoSyncTimeFromBrowser, 3000); // Small delay to ensure connectivity
+    
+    // Set up periodic time sync (every 30 minutes)
+    setInterval(autoSyncTimeFromBrowser, 30 * 60 * 1000);
+});
