@@ -139,7 +139,7 @@
                 </div>
             </section>
 
-            <!-- Add this new section to your main element -->
+<!-- Update the Input Interrupts Section in index.html -->
 <section id="input-interrupts">
     <h2>Input Interrupt Configuration</h2>
     <p>Configure digital inputs to work as interrupts with different priority levels.</p>
@@ -167,88 +167,88 @@
         </table>
     </div>
     
-    <!-- Update the Interrupt Configuration Modal in index.html -->
-<div id="interrupt-modal" class="modal">
-    <div class="modal-content">
-        <span class="close-modal">&times;</span>
-        <h3>Configure Input Interrupt</h3>
-        <form id="interrupt-form">
-            <input type="hidden" id="interrupt-id">
-            <div class="form-group">
-                <label for="interrupt-enabled">Enabled</label>
-                <input type="checkbox" id="interrupt-enabled">
-            </div>
-            <div class="form-group">
-                <label for="interrupt-name">Name</label>
-                <input type="text" id="interrupt-name" required>
-            </div>
-            <div class="form-group">
-                <label for="interrupt-input">Input</label>
-                <select id="interrupt-input" required>
-                    <!-- Options for inputs 1-16 -->
-                    <option value="0">Input 1</option>
-                    <option value="1">Input 2</option>
-                    <option value="2">Input 3</option>
-                    <option value="3">Input 4</option>
-                    <option value="4">Input 5</option>
-                    <option value="5">Input 6</option>
-                    <option value="6">Input 7</option>
-                    <option value="7">Input 8</option>
-                    <option value="8">Input 9</option>
-                    <option value="9">Input 10</option>
-                    <option value="10">Input 11</option>
-                    <option value="11">Input 12</option>
-                    <option value="12">Input 13</option>
-                    <option value="13">Input 14</option>
-                    <option value="14">Input 15</option>
-                    <option value="15">Input 16</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="interrupt-priority">Priority</label>
-                <select id="interrupt-priority" required>
-                    <option value="0">None (Polling)</option>
-                    <option value="1">High</option>
-                    <option value="2">Medium</option>
-                    <option value="3">Low</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="interrupt-trigger-type">Trigger Type</label>
-                <select id="interrupt-trigger-type" required>
-                    <option value="0">Rising Edge (LOW to HIGH)</option>
-                    <option value="1">Falling Edge (HIGH to LOW)</option>
-                    <option value="2">Change (Both Edges)</option>
-                    <option value="3">High Level</option>
-                    <option value="4">Low Level</option>
-                </select>
-            </div>
-            <div class="priority-description">
-                <p><strong>Priority Levels:</strong></p>
-                <ul>
-                    <li><strong>High:</strong> Processed first when multiple inputs change</li>
-                    <li><strong>Medium:</strong> Processed after all high priority inputs</li>
-                    <li><strong>Low:</strong> Processed after all high and medium priority inputs</li>
-                    <li><strong>None:</strong> No interrupt, input is polled periodically</li>
-                </ul>
-            </div>
-            <div class="trigger-description">
-                <p><strong>Trigger Types:</strong></p>
-                <ul>
-                    <li><strong>Rising Edge:</strong> Triggers when input changes from LOW to HIGH</li>
-                    <li><strong>Falling Edge:</strong> Triggers when input changes from HIGH to LOW</li>
-                    <li><strong>Change:</strong> Triggers on any state change (both edges)</li>
-                    <li><strong>High Level:</strong> Triggers continuously while input is HIGH</li>
-                    <li><strong>Low Level:</strong> Triggers continuously while input is LOW</li>
-                </ul>
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn-success">Save</button>
-                <button type="button" class="btn btn-secondary close-btn">Cancel</button>
-            </div>
-        </form>
+    <!-- Interrupt Configuration Modal -->
+    <div id="interrupt-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Configure Input Interrupt</h3>
+            <form id="interrupt-form">
+                <input type="hidden" id="interrupt-id">
+                <div class="form-group">
+                    <label for="interrupt-enabled">Enabled</label>
+                    <input type="checkbox" id="interrupt-enabled">
+                </div>
+                <div class="form-group">
+                    <label for="interrupt-name">Name</label>
+                    <input type="text" id="interrupt-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="interrupt-input">Input</label>
+                    <select id="interrupt-input" required>
+                        <!-- Options for inputs 1-16 -->
+                        <option value="0">Input 1</option>
+                        <option value="1">Input 2</option>
+                        <option value="2">Input 3</option>
+                        <option value="3">Input 4</option>
+                        <option value="4">Input 5</option>
+                        <option value="5">Input 6</option>
+                        <option value="6">Input 7</option>
+                        <option value="7">Input 8</option>
+                        <option value="8">Input 9</option>
+                        <option value="9">Input 10</option>
+                        <option value="10">Input 11</option>
+                        <option value="11">Input 12</option>
+                        <option value="12">Input 13</option>
+                        <option value="13">Input 14</option>
+                        <option value="14">Input 15</option>
+                        <option value="15">Input 16</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="interrupt-priority">Priority</label>
+                    <select id="interrupt-priority" required>
+                        <option value="0">None (Polling)</option>
+                        <option value="1">High</option>
+                        <option value="2">Medium</option>
+                        <option value="3">Low</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="interrupt-trigger-type">Trigger Type</label>
+                    <select id="interrupt-trigger-type" required>
+                        <option value="0">Rising Edge (LOW to HIGH)</option>
+                        <option value="1">Falling Edge (HIGH to LOW)</option>
+                        <option value="2">Change (Both Edges)</option>
+                        <option value="3">High Level</option>
+                        <option value="4">Low Level</option>
+                    </select>
+                </div>
+                <div class="priority-description">
+                    <p><strong>Priority Levels:</strong></p>
+                    <ul>
+                        <li><strong>High:</strong> Processed first when multiple inputs change</li>
+                        <li><strong>Medium:</strong> Processed after all high priority inputs</li>
+                        <li><strong>Low:</strong> Processed after all high and medium priority inputs</li>
+                        <li><strong>None:</strong> No interrupt, input is polled periodically</li>
+                    </ul>
+                </div>
+                <div class="trigger-description">
+                    <p><strong>Trigger Types:</strong></p>
+                    <ul>
+                        <li><strong>Rising Edge:</strong> Triggers when input changes from LOW to HIGH</li>
+                        <li><strong>Falling Edge:</strong> Triggers when input changes from HIGH to LOW</li>
+                        <li><strong>Change:</strong> Triggers on any state change (both edges)</li>
+                        <li><strong>High Level:</strong> Triggers continuously while input is HIGH</li>
+                        <li><strong>Low Level:</strong> Triggers continuously while input is LOW</li>
+                    </ul>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-success">Save</button>
+                    <button type="button" class="btn btn-secondary close-btn">Cancel</button>
+                </div>
+            </form>
+        </div>
     </div>
-</div>
 </section>
             
             <!-- Analog Inputs Section -->
@@ -361,6 +361,23 @@
                                     </select>
                                 </div>
                             </div>
+
+                            <!-- Add this inside the schedule-modal form, after the #input-trigger-section -->
+<div id="input-condition-sections">
+    <div class="form-group input-condition-section">
+        <label>Relays to control when inputs are HIGH</label>
+        <div id="relay-checkboxes-high" class="checkbox-grid">
+            <!-- Will be filled by JavaScript -->
+        </div>
+    </div>
+    
+    <div class="form-group input-condition-section">
+        <label>Relays to control when inputs are LOW</label>
+        <div id="relay-checkboxes-low" class="checkbox-grid">
+            <!-- Will be filled by JavaScript -->
+        </div>
+    </div>
+</div>
                             
                             <div class="form-group">
                                 <label for="schedule-action">Action</label>

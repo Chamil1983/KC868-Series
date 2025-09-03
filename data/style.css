@@ -1188,3 +1188,125 @@ nav ul li a[data-section="input-interrupts"] {
     margin: 15px 0;
     border: 1px solid #ddd;
 }
+
+/* Add to your style.css file */
+.priority-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.high-priority {
+    background-color: #F44336; /* Red */
+}
+
+.medium-priority {
+    background-color: #FF9800; /* Orange */
+}
+
+.low-priority {
+    background-color: #2196F3; /* Blue */
+}
+
+.no-priority {
+    background-color: #9E9E9E; /* Grey */
+}
+
+.priority-description {
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border: 1px solid #ddd;
+}
+
+.interrupts-container {
+    margin-top: 15px;
+}
+
+/* Ensure the navigation includes the new section */
+nav ul li a[data-section="input-interrupts"] {
+    /* Same styling as your other navigation items */
+}
+
+/* Add these styles to style.css for the trigger type badges */
+.trigger-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.trigger-rising {
+    background-color: #2196F3; /* Blue */
+}
+
+.trigger-falling {
+    background-color: #673AB7; /* Deep Purple */
+}
+
+.trigger-change {
+    background-color: #009688; /* Teal */
+}
+
+.trigger-high {
+    background-color: #4CAF50; /* Green */
+}
+
+.trigger-low {
+    background-color: #FF5722; /* Deep Orange */
+}
+
+.trigger-description {
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border: 1px solid #ddd;
+}
+
+/* Add these styles to your style.css file */
+#input-condition-sections {
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 15px;
+    margin-top: 15px;
+    background-color: #f9f9f9;
+}
+
+.input-condition-section {
+    background-color: white;
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.input-condition-section:first-child {
+    border-left: 3px solid #4CAF50;
+}
+
+.input-condition-section:last-child {
+    border-left: 3px solid #F44336;
+    margin-bottom: 0;
+}
+
+.target-high {
+    display: block;
+    padding: 3px;
+    margin: 2px 0;
+    background-color: #e8f5e9;
+    border-left: 3px solid #4CAF50;
+}
+
+.target-low {
+    display: block;
+    padding: 3px;
+    margin: 2px 0;
+    background-color: #ffebee;
+    border-left: 3px solid #F44336;
+}

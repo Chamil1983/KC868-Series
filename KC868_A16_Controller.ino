@@ -50,7 +50,7 @@
 #include <PCF8574.h>  // Using Renzo Mischianti's library
 #include <esp_intr_alloc.h>
 
-// I2C PCF8574 addresses
+ // I2C PCF8574 addresses
 #define PCF8574_INPUTS_1_8    0x22
 #define PCF8574_INPUTS_9_16   0x21
 #define PCF8574_OUTPUTS_1_8   0x24
@@ -240,6 +240,7 @@ struct TimeSchedule {
     uint8_t action;       // 0=OFF, 1=ON, 2=TOGGLE
     uint8_t targetType;   // 0=Output, 1=Multiple outputs
     uint16_t targetId;    // Output number (0-15) or bitmask for multiple outputs
+    uint16_t targetIdLow; // Additional target for LOW state (when input is FALSE)
     char name[32];        // Name/description of the schedule
 };
 
@@ -333,6 +334,10 @@ void pollNonInterruptInputs();
 void handleInterrupts();
 void handleUpdateInterrupts();
 
+void checkInputBasedSchedules(int changedInputIndex, bool newState);
+void executeSchedule(int scheduleIndex);
+void handleEvaluateInputSchedules();
+
 // Setup function
 void setup() {
     // Initialize serial communication for debugging
@@ -415,7 +420,7 @@ void setup() {
 
     // Initialize interrupt configurations
     initInterruptConfigs();
-    
+
     // Setup input interrupts
     setupInputInterrupts();
 
@@ -425,7 +430,7 @@ void setup() {
     Serial.println("KC868-A16 Controller initialization complete");
 }
 
-// Modified loop function to broadcast more frequently
+// Modified loop function to read analog inputs more frequently
 void loop() {
     // Handle DNS requests for captive portal if in AP mode
     if (WiFi.getMode() == WIFI_AP) {
@@ -447,7 +452,7 @@ void loop() {
 
     // Process any input interrupts with priorities
     processInputInterrupts();
-    
+
     // Poll any non-interrupt inputs
     pollNonInterruptInputs();
 
@@ -463,14 +468,14 @@ void loop() {
         }
     }
 
-    // Read analog inputs every 500ms
-    if (currentMillis - lastAnalogCheck >= 500) {
+    // Read analog inputs more frequently - reduced to 100ms (from 500ms) for better responsiveness
+    if (currentMillis - lastAnalogCheck >= 100) {
         lastAnalogCheck = currentMillis;
         bool analogChanged = false;
 
         for (int i = 0; i < 4; i++) {
             int newValue = readAnalogInput(i);
-            if (abs(newValue - analogValues[i]) > 20) { // Apply some hysteresis
+            if (abs(newValue - analogValues[i]) > 10) { // Reduced threshold for more sensitivity
                 analogValues[i] = newValue;
                 analogVoltages[i] = convertAnalogToVoltage(newValue); // Update voltage
                 analogChanged = true;
@@ -487,8 +492,8 @@ void loop() {
         }
     }
 
-    // Broadcast periodic updates every 2 seconds even if no changes
-    if (currentMillis - lastWebSocketUpdate >= 2000) {
+    // Broadcast periodic updates every 1 second even if no changes (reduced from 2 seconds)
+    if (currentMillis - lastWebSocketUpdate >= 1000) {
         broadcastUpdate();
         lastWebSocketUpdate = currentMillis;
     }
@@ -530,7 +535,7 @@ void initInterruptConfigs() {
         interruptConfigs[i].triggerType = INTERRUPT_TRIGGER_CHANGE;  // Default to change (both edges)
         snprintf(interruptConfigs[i].name, 32, "Input %d", i + 1);
     }
-    
+
     // Load any saved configurations from EEPROM
     loadInterruptConfigs();
 }
@@ -539,7 +544,7 @@ void initInterruptConfigs() {
 void saveInterruptConfigs() {
     DynamicJsonDocument doc(2048);
     JsonArray configArray = doc.createNestedArray("interrupts");
-    
+
     for (int i = 0; i < 16; i++) {
         JsonObject config = configArray.createNestedObject();
         config["enabled"] = interruptConfigs[i].enabled;
@@ -548,22 +553,22 @@ void saveInterruptConfigs() {
         config["triggerType"] = interruptConfigs[i].triggerType;
         config["name"] = interruptConfigs[i].name;
     }
-    
+
     // Serialize to buffer
     char jsonBuffer[2048];
     size_t n = serializeJson(doc, jsonBuffer);
-    
+
     // Store in EEPROM
     for (size_t i = 0; i < n && i < 1024; i++) {
         EEPROM.write(EEPROM_INTERRUPT_CONFIG_ADDR + i, jsonBuffer[i]);
     }
-    
+
     // Write null terminator
     EEPROM.write(EEPROM_INTERRUPT_CONFIG_ADDR + n, 0);
-    
+
     // Commit changes
     EEPROM.commit();
-    
+
     debugPrintln("Interrupt configurations saved");
 }
 
@@ -573,42 +578,42 @@ void loadInterruptConfigs() {
     // Create a buffer to read JSON data
     char jsonBuffer[2048];
     size_t i = 0;
-    
+
     // Read data until null terminator or max buffer size
     while (i < 2047) {
         jsonBuffer[i] = EEPROM.read(EEPROM_INTERRUPT_CONFIG_ADDR + i);
         if (jsonBuffer[i] == 0) break;
         i++;
     }
-    
+
     // Add null terminator if buffer is full
     jsonBuffer[i] = 0;
-    
+
     // If we read something, try to parse it
     if (i > 0) {
         DynamicJsonDocument doc(2048);
         DeserializationError error = deserializeJson(doc, jsonBuffer);
-        
+
         if (!error && doc.containsKey("interrupts")) {
             JsonArray configArray = doc["interrupts"];
-            
+
             int index = 0;
             for (JsonObject config : configArray) {
                 if (index >= 16) break;
-                
+
                 interruptConfigs[index].enabled = config["enabled"] | false;
                 interruptConfigs[index].priority = config["priority"] | INPUT_PRIORITY_MEDIUM;
                 interruptConfigs[index].inputIndex = config["inputIndex"] | index;
                 interruptConfigs[index].triggerType = config["triggerType"] | INTERRUPT_TRIGGER_CHANGE;
-                
+
                 const char* name = config["name"];
                 if (name) {
                     strlcpy(interruptConfigs[index].name, name, 32);
                 }
-                
+
                 index++;
             }
-            
+
             debugPrintln("Interrupt configurations loaded");
         }
         else {
@@ -624,7 +629,7 @@ void loadInterruptConfigs() {
 void setupInputInterrupts() {
     // Disable any existing interrupts first
     disableInputInterrupts();
-    
+
     // Check if any interrupt is enabled
     bool anyEnabled = false;
     for (int i = 0; i < 16; i++) {
@@ -633,36 +638,36 @@ void setupInputInterrupts() {
             break;
         }
     }
-    
+
     if (!anyEnabled) {
         debugPrintln("No input interrupts enabled");
         return;
     }
-    
+
     // Setup task notifications for input interrupts
     debugPrintln("Setting up input interrupts");
-    
+
     // For I2C expanders, we need to use a different approach since we can't
     // directly attach interrupts to those pins. We'll use a polling approach
     // with priorities determining the order of checking.
-    
+
     // Reset interrupt flags
     for (int i = 0; i < 16; i++) {
         inputStateChanged[i] = false;
     }
-    
+
     inputInterruptsEnabled = true;
 }
 
 // Disable all input interrupts
 void disableInputInterrupts() {
     inputInterruptsEnabled = false;
-    
+
     // Reset interrupt flags
     for (int i = 0; i < 16; i++) {
         inputStateChanged[i] = false;
     }
-    
+
     debugPrintln("Input interrupts disabled");
 }
 
@@ -671,106 +676,106 @@ void disableInputInterrupts() {
 // This function is called from loop() to process any input changes
 void processInputInterrupts() {
     if (!inputInterruptsEnabled) return;
-    
+
     // Keep track of previous states for edge detection
-    static bool prevInputStates[16] = {false};
-    
+    static bool prevInputStates[16] = { false };
+
     unsigned long currentMillis = millis();
-    
+
     // Read all digital inputs into a temporary array to avoid multiple I2C transactions
     bool currentInputs[16];
     bool anyChange = false;
-    
+
     // Read inputs from I2C expanders
     try {
         // Read inputs 1-8
         for (int i = 0; i < 8; i++) {
             bool newState = !inputIC1.digitalRead(i);  // Inverted because of pull-up
             currentInputs[i] = newState;
-            
+
             // Determine if this input should be processed based on its trigger type
             bool shouldProcess = false;
-            
+
             if (interruptConfigs[i].enabled) {
-                switch(interruptConfigs[i].triggerType) {
-                    case INTERRUPT_TRIGGER_RISING:
-                        // Process on rising edge (LOW to HIGH)
-                        shouldProcess = !prevInputStates[i] && newState;
-                        break;
-                        
-                    case INTERRUPT_TRIGGER_FALLING:
-                        // Process on falling edge (HIGH to LOW)
-                        shouldProcess = prevInputStates[i] && !newState;
-                        break;
-                        
-                    case INTERRUPT_TRIGGER_CHANGE:
-                        // Process on any edge (change)
-                        shouldProcess = prevInputStates[i] != newState;
-                        break;
-                        
-                    case INTERRUPT_TRIGGER_HIGH_LEVEL:
-                        // Process when the input is HIGH
-                        shouldProcess = newState;
-                        break;
-                        
-                    case INTERRUPT_TRIGGER_LOW_LEVEL:
-                        // Process when the input is LOW
-                        shouldProcess = !newState;
-                        break;
+                switch (interruptConfigs[i].triggerType) {
+                case INTERRUPT_TRIGGER_RISING:
+                    // Process on rising edge (LOW to HIGH)
+                    shouldProcess = !prevInputStates[i] && newState;
+                    break;
+
+                case INTERRUPT_TRIGGER_FALLING:
+                    // Process on falling edge (HIGH to LOW)
+                    shouldProcess = prevInputStates[i] && !newState;
+                    break;
+
+                case INTERRUPT_TRIGGER_CHANGE:
+                    // Process on any edge (change)
+                    shouldProcess = prevInputStates[i] != newState;
+                    break;
+
+                case INTERRUPT_TRIGGER_HIGH_LEVEL:
+                    // Process when the input is HIGH
+                    shouldProcess = newState;
+                    break;
+
+                case INTERRUPT_TRIGGER_LOW_LEVEL:
+                    // Process when the input is LOW
+                    shouldProcess = !newState;
+                    break;
                 }
-                
+
                 if (shouldProcess) {
                     anyChange = true;
                     inputStateChanged[i] = true;
                 }
             }
-            
+
             // Update previous state for next iteration
             prevInputStates[i] = newState;
         }
-        
+
         // Read inputs 9-16
         for (int i = 0; i < 8; i++) {
             bool newState = !inputIC2.digitalRead(i);  // Inverted because of pull-up
             currentInputs[i + 8] = newState;
-            
+
             // Determine if this input should be processed based on its trigger type
             bool shouldProcess = false;
-            
+
             if (interruptConfigs[i + 8].enabled) {
-                switch(interruptConfigs[i + 8].triggerType) {
-                    case INTERRUPT_TRIGGER_RISING:
-                        // Process on rising edge (LOW to HIGH)
-                        shouldProcess = !prevInputStates[i + 8] && newState;
-                        break;
-                        
-                    case INTERRUPT_TRIGGER_FALLING:
-                        // Process on falling edge (HIGH to LOW)
-                        shouldProcess = prevInputStates[i + 8] && !newState;
-                        break;
-                        
-                    case INTERRUPT_TRIGGER_CHANGE:
-                        // Process on any edge (change)
-                        shouldProcess = prevInputStates[i + 8] != newState;
-                        break;
-                        
-                    case INTERRUPT_TRIGGER_HIGH_LEVEL:
-                        // Process when the input is HIGH
-                        shouldProcess = newState;
-                        break;
-                        
-                    case INTERRUPT_TRIGGER_LOW_LEVEL:
-                        // Process when the input is LOW
-                        shouldProcess = !newState;
-                        break;
+                switch (interruptConfigs[i + 8].triggerType) {
+                case INTERRUPT_TRIGGER_RISING:
+                    // Process on rising edge (LOW to HIGH)
+                    shouldProcess = !prevInputStates[i + 8] && newState;
+                    break;
+
+                case INTERRUPT_TRIGGER_FALLING:
+                    // Process on falling edge (HIGH to LOW)
+                    shouldProcess = prevInputStates[i + 8] && !newState;
+                    break;
+
+                case INTERRUPT_TRIGGER_CHANGE:
+                    // Process on any edge (change)
+                    shouldProcess = prevInputStates[i + 8] != newState;
+                    break;
+
+                case INTERRUPT_TRIGGER_HIGH_LEVEL:
+                    // Process when the input is HIGH
+                    shouldProcess = newState;
+                    break;
+
+                case INTERRUPT_TRIGGER_LOW_LEVEL:
+                    // Process when the input is LOW
+                    shouldProcess = !newState;
+                    break;
                 }
-                
+
                 if (shouldProcess) {
                     anyChange = true;
                     inputStateChanged[i + 8] = true;
                 }
             }
-            
+
             // Update previous state for next iteration
             prevInputStates[i + 8] = newState;
         }
@@ -781,98 +786,488 @@ void processInputInterrupts() {
         debugPrintln("Error reading inputs for interrupt processing: " + String(e.what()));
         return;
     }
-    
+
     // If no changes detected, nothing to do
     if (!anyChange) return;
-    
+
     // Process changes based on priority levels
     // First HIGH priority
     for (int i = 0; i < 16; i++) {
-        if (interruptConfigs[i].enabled && 
+        if (interruptConfigs[i].enabled &&
             interruptConfigs[i].priority == INPUT_PRIORITY_HIGH &&
             inputStateChanged[i]) {
-            
-            // Process this input change
+
+            // Process this input change - this now handles schedule checking
             processInputChange(i, currentInputs[i]);
             inputStateChanged[i] = false;
         }
     }
-    
+
     // Then MEDIUM priority
     for (int i = 0; i < 16; i++) {
-        if (interruptConfigs[i].enabled && 
+        if (interruptConfigs[i].enabled &&
             interruptConfigs[i].priority == INPUT_PRIORITY_MEDIUM &&
             inputStateChanged[i]) {
-            
-            // Process this input change
+
+            // Process this input change - this now handles schedule checking
             processInputChange(i, currentInputs[i]);
             inputStateChanged[i] = false;
         }
     }
-    
+
     // Finally LOW priority
     for (int i = 0; i < 16; i++) {
-        if (interruptConfigs[i].enabled && 
+        if (interruptConfigs[i].enabled &&
             interruptConfigs[i].priority == INPUT_PRIORITY_LOW &&
             inputStateChanged[i]) {
-            
-            // Process this input change
+
+            // Process this input change - this now handles schedule checking
             processInputChange(i, currentInputs[i]);
             inputStateChanged[i] = false;
         }
     }
-    
+
     // Update all input states after processing
     for (int i = 0; i < 16; i++) {
         inputStates[i] = currentInputs[i];
     }
-    
+
     // Broadcast the update after processing
     broadcastUpdate();
 }
 
-// Process a specific input change
+// Process a specific input change - Modified to properly handle scheduled actions
 void processInputChange(int inputIndex, bool newState) {
     debugPrintln("Input " + String(inputIndex + 1) + " changed to " + String(newState ? "HIGH" : "LOW"));
-    
+
     // Update corresponding input state
     inputStates[inputIndex] = newState;
-    
-    // Here you can add specific actions to take when an input changes
-    // For example, trigger an action, change a relay state, etc.
-    
-    // Example: Toggle a corresponding relay
-    // if (inputIndex < 16) {
-    //     outputStates[inputIndex] = newState;
-    //     writeOutputs();
-    // }
+
+    // Check for any schedules that use this input and evaluate if they should be triggered
+    checkInputBasedSchedules();
+
+    // Broadcast update to ensure UI reflects current state
+    broadcastUpdate();
 }
+
+// Function to check and execute input-based schedules
+// Function to check and execute input-based schedules
+void checkInputBasedSchedules() {
+    // Calculate current state of all inputs as a single 32-bit value
+    uint32_t currentInputState = 0;
+
+    // Add digital inputs (bits 0-15)
+    for (int i = 0; i < 16; i++) {
+        if (inputStates[i]) {
+            currentInputState |= (1UL << i);
+        }
+    }
+
+    // Add direct inputs HT1-HT3 (bits 16-18)
+    for (int i = 0; i < 3; i++) {
+        if (directInputStates[i]) {
+            currentInputState |= (1UL << (16 + i));
+        }
+    }
+
+    // Check each schedule
+    for (int i = 0; i < MAX_SCHEDULES; i++) {
+        if (!schedules[i].enabled) continue;
+
+        // We only care about input-based or combined schedules
+        if (schedules[i].triggerType != 1 && schedules[i].triggerType != 2) continue;
+
+        // Skip if this schedule has no input mask
+        if (schedules[i].inputMask == 0) continue;
+
+        bool inputConditionMet = false;
+
+        // For combined schedules, we also need to check the time condition
+        bool timeConditionMet = true;  // Default true for input-based, will check for combined
+
+        if (schedules[i].triggerType == 2) { // Combined type
+            // Get current time
+            DateTime now;
+            if (rtcInitialized) {
+                now = rtc.now();
+            }
+            else {
+                // Use ESP32 time if RTC not available
+                time_t nowTime;
+                struct tm timeinfo;
+                time(&nowTime);
+                localtime_r(&nowTime, &timeinfo);
+                now = DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                    timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+            }
+
+            // Calculate day of week bit (1=Sunday, 2=Monday, 4=Tuesday, etc.)
+            uint8_t currentDayOfWeek = now.dayOfTheWeek();  // 0=Sunday, 1=Monday, etc.
+            uint8_t currentDayBit = (1 << currentDayOfWeek);
+
+            // Check if schedule should run today
+            if (!(schedules[i].days & currentDayBit)) {
+                timeConditionMet = false;
+            }
+            else {
+                // Check if it's the right hour and minute
+                timeConditionMet = (now.hour() == schedules[i].hour && now.minute() == schedules[i].minute);
+            }
+
+            if (!timeConditionMet) {
+                continue; // Skip to next schedule if time condition not met for combined type
+            }
+        }
+
+        // Track inputs with TRUE and FALSE matches to handle both conditions
+        uint16_t highMatchingInputs = 0;
+        uint16_t lowMatchingInputs = 0;
+
+        // Evaluate input conditions based on logic type
+        if (schedules[i].logic == 0) {  // AND logic
+            // All conditions must be met
+            inputConditionMet = true;  // Start with true for AND logic
+
+            for (int bitPos = 0; bitPos < 19; bitPos++) {
+                uint32_t bitMask = 1UL << bitPos;
+
+                // If this bit is part of our input mask, check its state
+                if (schedules[i].inputMask & bitMask) {
+                    bool desiredState = (schedules[i].inputStates & bitMask) != 0;
+                    bool currentState = (currentInputState & bitMask) != 0;
+
+                    if (currentState != desiredState) {
+                        inputConditionMet = false;
+                        break; // Break early for AND logic if one condition fails
+                    }
+
+                    // Track which inputs match which state for relay control
+                    if (currentState) {
+                        highMatchingInputs |= bitMask;
+                    }
+                    else {
+                        lowMatchingInputs |= bitMask;
+                    }
+                }
+            }
+        }
+        else {  // OR logic
+            // Any condition can trigger
+            inputConditionMet = false;  // Start with false for OR logic
+
+            for (int bitPos = 0; bitPos < 19; bitPos++) {
+                uint32_t bitMask = 1UL << bitPos;
+
+                // If this bit is part of our input mask, check its state
+                if (schedules[i].inputMask & bitMask) {
+                    bool desiredState = (schedules[i].inputStates & bitMask) != 0;
+                    bool currentState = (currentInputState & bitMask) != 0;
+
+                    // Track which inputs match which state for relay control
+                    if (currentState) {
+                        highMatchingInputs |= bitMask;
+                    }
+                    else {
+                        lowMatchingInputs |= bitMask;
+                    }
+
+                    if (currentState == desiredState) {
+                        inputConditionMet = true;
+                        // Don't break early for OR logic - we need to track all matching inputs
+                    }
+                }
+            }
+        }
+
+        // If all conditions are met, execute the schedule
+        if (inputConditionMet && timeConditionMet) {
+            debugPrintln("Input-based trigger for schedule " + String(i) + ": " + String(schedules[i].name));
+
+            // Execute actions for HIGH inputs if we have any inputs in HIGH state
+            if (highMatchingInputs && schedules[i].targetId > 0) {
+                executeScheduleAction(i, schedules[i].targetId);
+            }
+
+            // Execute actions for LOW inputs if we have any inputs in LOW state
+            if (lowMatchingInputs && schedules[i].targetIdLow > 0) {
+                executeScheduleAction(i, schedules[i].targetIdLow);
+            }
+        }
+    }
+}
+
+
+// Modified function to execute a schedule action with a specific target
+void executeScheduleAction(int scheduleIndex, uint16_t targetId) {
+    if (scheduleIndex < 0 || scheduleIndex >= MAX_SCHEDULES) return;
+
+    debugPrintln("Executing schedule: " + String(schedules[scheduleIndex].name));
+
+    // Perform the scheduled action
+    if (schedules[scheduleIndex].targetType == 0) {
+        // Single output - targetId should be a relay index
+        uint8_t relay = targetId;
+        if (relay < 16) {
+            debugPrintln("Setting single relay " + String(relay) + " to " +
+                (schedules[scheduleIndex].action == 0 ? "OFF" :
+                    schedules[scheduleIndex].action == 1 ? "ON" : "TOGGLE"));
+
+            if (schedules[scheduleIndex].action == 0) {        // OFF
+                outputStates[relay] = false;
+            }
+            else if (schedules[scheduleIndex].action == 1) {   // ON
+                outputStates[relay] = true;
+            }
+            else if (schedules[scheduleIndex].action == 2) {   // TOGGLE
+                outputStates[relay] = !outputStates[relay];
+            }
+        }
+    }
+    else if (schedules[scheduleIndex].targetType == 1) {
+        // Multiple outputs (using bitmask)
+        debugPrintln("Setting multiple relays with mask: " + String(targetId, BIN));
+
+        for (int j = 0; j < 16; j++) {
+            if (targetId & (1 << j)) {
+                debugPrintln("Setting relay " + String(j) + " to " +
+                    (schedules[scheduleIndex].action == 0 ? "OFF" :
+                        schedules[scheduleIndex].action == 1 ? "ON" : "TOGGLE"));
+
+                if (schedules[scheduleIndex].action == 0) {        // OFF
+                    outputStates[j] = false;
+                }
+                else if (schedules[scheduleIndex].action == 1) {   // ON
+                    outputStates[j] = true;
+                }
+                else if (schedules[scheduleIndex].action == 2) {   // TOGGLE
+                    outputStates[j] = !outputStates[j];
+                }
+            }
+        }
+    }
+
+    // Update outputs
+    if (!writeOutputs()) {
+        debugPrintln("ERROR: Failed to write outputs when executing schedule");
+    }
+
+    // Broadcast update to UI
+    broadcastUpdate();
+}
+
+// Original executeScheduleAction for backward compatibility
+void executeScheduleAction(int scheduleIndex) {
+    executeScheduleAction(scheduleIndex, schedules[scheduleIndex].targetId);
+}
+
+
+// Check input-based schedules when a specific input changes
+void checkInputBasedSchedules(int changedInputIndex, bool newState) {
+    // Calculate the bit mask for this input
+    uint16_t changedInputMask = (1UL << changedInputIndex);
+
+    // Calculate current state of all inputs as a single 32-bit value
+    uint32_t currentInputState = 0;
+
+    // Add digital inputs (bits 0-15)
+    for (int i = 0; i < 16; i++) {
+        if (inputStates[i]) {
+            currentInputState |= (1UL << i);
+        }
+    }
+
+    // Add direct inputs HT1-HT3 (bits 16-18)
+    for (int i = 0; i < 3; i++) {
+        if (directInputStates[i]) {
+            currentInputState |= (1UL << (16 + i));
+        }
+    }
+
+    debugPrintln("Checking input-based schedules for input " + String(changedInputIndex) +
+        " (state: " + String(newState ? "HIGH" : "LOW") + ")");
+
+    // Check each schedule
+    for (int i = 0; i < MAX_SCHEDULES; i++) {
+        if (!schedules[i].enabled) continue;
+
+        // We only care about input-based or combined schedules
+        if (schedules[i].triggerType != 1 && schedules[i].triggerType != 2) continue;
+
+        // Skip if this input isn't part of the schedule's input mask
+        if (!(schedules[i].inputMask & changedInputMask)) continue;
+
+        debugPrintln("Evaluating schedule " + String(i) + ": " + String(schedules[i].name));
+
+        bool inputConditionMet = false;
+
+        // For combined schedules, we also need to check the time condition
+        bool timeConditionMet = true;  // Default true, will be overridden if it's a combined schedule
+
+        if (schedules[i].triggerType == 2) { // Combined type
+            DateTime now;
+            if (rtcInitialized) {
+                now = rtc.now();
+            }
+            else {
+                // Use ESP32 time if RTC not available
+                time_t nowTime;
+                struct tm timeinfo;
+                time(&nowTime);
+                localtime_r(&nowTime, &timeinfo);
+                now = DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                    timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+            }
+
+            // Calculate day of week bit (1=Sunday, 2=Monday, 4=Tuesday, etc.)
+            uint8_t currentDayOfWeek = now.dayOfTheWeek();  // 0=Sunday, 1=Monday, etc.
+            uint8_t currentDayBit = (1 << currentDayOfWeek);
+
+            // Check if schedule should run today
+            if (!(schedules[i].days & currentDayBit)) {
+                timeConditionMet = false;
+            }
+            else {
+                // Check if it's time to run
+                timeConditionMet = (now.hour() == schedules[i].hour && now.minute() == schedules[i].minute);
+            }
+
+            if (!timeConditionMet) {
+                debugPrintln("Time condition not met for combined schedule " + String(i));
+                continue; // Skip to next schedule if time condition not met for combined type
+            }
+        }
+
+        // Check input conditions
+        if (schedules[i].inputMask != 0) {
+            // Evaluate input conditions based on logic type
+            if (schedules[i].logic == 0) {  // AND logic
+                // All conditions must be met
+                inputConditionMet = true;  // Start with true for AND logic
+
+                for (int bitPos = 0; bitPos < 19; bitPos++) {
+                    uint32_t bitMask = 1UL << bitPos;
+
+                    // If this bit is part of our input mask, check its state
+                    if (schedules[i].inputMask & bitMask) {
+                        bool desiredState = (schedules[i].inputStates & bitMask) != 0;
+                        bool currentState = (currentInputState & bitMask) != 0;
+
+                        if (currentState != desiredState) {
+                            inputConditionMet = false;
+                            break; // Break early for AND logic if one condition fails
+                        }
+                    }
+                }
+            }
+            else {  // OR logic
+             // Any condition can trigger
+                inputConditionMet = false;  // Start with false for OR logic
+
+                for (int bitPos = 0; bitPos < 19; bitPos++) {
+                    uint32_t bitMask = 1UL << bitPos;
+
+                    // If this bit is part of our input mask, check its state
+                    if (schedules[i].inputMask & bitMask) {
+                        bool desiredState = (schedules[i].inputStates & bitMask) != 0;
+                        bool currentState = (currentInputState & bitMask) != 0;
+
+                        if (currentState == desiredState) {
+                            inputConditionMet = true;
+                            break; // Break early for OR logic if one condition is met
+                        }
+                    }
+                }
+            }
+        }
+
+        debugPrintln("Input condition " + String(inputConditionMet ? "met" : "not met") +
+            " for schedule " + String(i));
+
+        // For input-based trigger, we need the input condition to be met
+        if (inputConditionMet) {
+            debugPrintln("Executing schedule: " + String(schedules[i].name));
+
+            // Perform the scheduled action
+            if (schedules[i].targetType == 0) {
+                // Single output
+                uint8_t relay = schedules[i].targetId;
+                if (relay < 16) {
+                    debugPrintln("Setting single relay " + String(relay) + " to " +
+                        (schedules[i].action == 0 ? "OFF" :
+                            schedules[i].action == 1 ? "ON" : "TOGGLE"));
+
+                    if (schedules[i].action == 0) {        // OFF
+                        outputStates[relay] = false;
+                    }
+                    else if (schedules[i].action == 1) {   // ON
+                        outputStates[relay] = true;
+                    }
+                    else if (schedules[i].action == 2) {   // TOGGLE
+                        outputStates[relay] = !outputStates[relay];
+                    }
+                }
+            }
+            else if (schedules[i].targetType == 1) {
+                // Multiple outputs (using bitmask)
+                debugPrintln("Setting multiple relays with mask: " + String(schedules[i].targetId, BIN));
+
+                for (int j = 0; j < 16; j++) {
+                    if (schedules[i].targetId & (1 << j)) {
+                        debugPrintln("Setting relay " + String(j) + " to " +
+                            (schedules[i].action == 0 ? "OFF" :
+                                schedules[i].action == 1 ? "ON" : "TOGGLE"));
+
+                        if (schedules[i].action == 0) {        // OFF
+                            outputStates[j] = false;
+                        }
+                        else if (schedules[i].action == 1) {   // ON
+                            outputStates[j] = true;
+                        }
+                        else if (schedules[i].action == 2) {   // TOGGLE
+                            outputStates[j] = !outputStates[j];
+                        }
+                    }
+                }
+            }
+
+            // Update outputs
+            if (!writeOutputs()) {
+                debugPrintln("ERROR: Failed to write outputs when executing schedule");
+            }
+
+            // Broadcast update
+            broadcastUpdate();
+        }
+    }
+}
+
 
 // Poll inputs with NONE priority (non-interrupt)
 void pollNonInterruptInputs() {
     unsigned long currentMillis = millis();
-    
+
     // Only poll at the specified interval
     if (currentMillis - lastInputReadTime < INPUT_READ_INTERVAL) {
         return;
     }
-    
+
     lastInputReadTime = currentMillis;
-    
+
     // Identify which inputs need polling (priority NONE)
-    bool needsPolling[16] = {false};
+    bool needsPolling[16] = { false };
     bool anyNeedPolling = false;
-    
+    bool anyChanged = false;
+
     for (int i = 0; i < 16; i++) {
         if (interruptConfigs[i].priority == INPUT_PRIORITY_NONE) {
             needsPolling[i] = true;
             anyNeedPolling = true;
         }
     }
-    
+
     // If no inputs need polling, exit
     if (!anyNeedPolling) return;
-    
+
     // Poll only the required inputs
     try {
         // Poll inputs 1-8 if needed
@@ -881,18 +1276,26 @@ void pollNonInterruptInputs() {
                 bool newState = !inputIC1.digitalRead(i); // Inverted because of pull-up
                 if (newState != inputStates[i]) {
                     inputStates[i] = newState;
+                    anyChanged = true;
                     debugPrintln("Polled Input " + String(i + 1) + " changed to " + String(newState ? "HIGH" : "LOW"));
+
+                    // Process this input change directly
+                    processInputChange(i, newState);
                 }
             }
         }
-        
+
         // Poll inputs 9-16 if needed
         for (int i = 0; i < 8; i++) {
             if (needsPolling[i + 8]) {
                 bool newState = !inputIC2.digitalRead(i); // Inverted because of pull-up
                 if (newState != inputStates[i + 8]) {
                     inputStates[i + 8] = newState;
+                    anyChanged = true;
                     debugPrintln("Polled Input " + String(i + 9) + " changed to " + String(newState ? "HIGH" : "LOW"));
+
+                    // Process this input change directly
+                    processInputChange(i + 8, newState);
                 }
             }
         }
@@ -902,13 +1305,16 @@ void pollNonInterruptInputs() {
         lastErrorMessage = "Error polling non-interrupt inputs";
         debugPrintln("Error polling inputs: " + String(e.what()));
     }
+
+    // If any inputs changed, check if we need to update schedules
+    // (processInputChange will handle this for individual inputs)
 }
 
 // Handle GET request for interrupts configuration
 void handleInterrupts() {
     DynamicJsonDocument doc(4096);
     JsonArray interruptsArray = doc.createNestedArray("interrupts");
-    
+
     for (int i = 0; i < 16; i++) {
         JsonObject interrupt = interruptsArray.createNestedObject();
         interrupt["id"] = i;
@@ -918,7 +1324,7 @@ void handleInterrupts() {
         interrupt["inputIndex"] = interruptConfigs[i].inputIndex;
         interrupt["triggerType"] = interruptConfigs[i].triggerType;
     }
-    
+
     String response;
     serializeJson(doc, response);
     server.send(200, "application/json", response);
@@ -927,32 +1333,32 @@ void handleInterrupts() {
 // Handle POST request to update interrupts configuration
 void handleUpdateInterrupts() {
     String response = "{\"status\":\"error\",\"message\":\"Invalid request\"}";
-    
+
     if (server.hasArg("plain")) {
         String body = server.arg("plain");
         DynamicJsonDocument doc(1024);
         DeserializationError error = deserializeJson(doc, body);
-        
+
         if (!error && doc.containsKey("interrupt")) {
             JsonObject interruptJson = doc["interrupt"];
-            
+
             // Extract interrupt data
             int id = interruptJson.containsKey("id") ? interruptJson["id"].as<int>() : -1;
-            
+
             if (id >= 0 && id < 16) {
                 interruptConfigs[id].enabled = interruptJson["enabled"];
                 strlcpy(interruptConfigs[id].name, interruptJson["name"] | "Input", 32);
                 interruptConfigs[id].priority = interruptJson["priority"] | INPUT_PRIORITY_MEDIUM;
                 interruptConfigs[id].triggerType = interruptJson["triggerType"] | INTERRUPT_TRIGGER_CHANGE;
-                
+
                 // Save configurations
                 saveInterruptConfigs();
-                
+
                 // Reconfigure interrupts if needed
                 if (inputInterruptsEnabled) {
                     setupInputInterrupts();
                 }
-                
+
                 response = "{\"status\":\"success\"}";
             }
         }
@@ -960,22 +1366,22 @@ void handleUpdateInterrupts() {
             // Handle simple enable/disable
             int id = doc["id"].as<int>();
             bool enabled = doc["enabled"];
-            
+
             if (id >= 0 && id < 16) {
                 interruptConfigs[id].enabled = enabled;
                 saveInterruptConfigs();
-                
+
                 // Reconfigure interrupts if needed
                 if (inputInterruptsEnabled) {
                     setupInputInterrupts();
                 }
-                
+
                 response = "{\"status\":\"success\"}";
             }
         }
         else if (!error && doc.containsKey("action")) {
             String action = doc["action"];
-            
+
             if (action == "enable_all") {
                 // Enable all interrupts
                 for (int i = 0; i < 16; i++) {
@@ -996,50 +1402,47 @@ void handleUpdateInterrupts() {
             }
         }
     }
-    
+
     server.send(200, "application/json", response);
 }
 
 
-// Improved calibration function using measured data points
+// Advanced calibration function for accurate 0-5V measurement
 float convertAnalogToVoltage(int analogValue) {
-    // Calibration data points (actual voltage, ADC reading)
-    // [0V, 0], [1V, 1054], [2V, 2287], [3V, 3769], [3.13V, 4096]
-    
-    // Handle limits first
-    if (analogValue >= 4096) {
-        return 5.0f;  // Maximum reading (scale to 5V)
+    // Calibration data: pairs of [ADC value, Actual Voltage]
+    // These should be measured using a calibrated reference
+    // For example: with 1V input, ADC reads ~820, with 5V input, ADC reads ~4095
+    const int calADC[] = { 0, 820, 1640, 2460, 3270, 4095 };
+    const float calVolts[] = { 0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+    const int numCalPoints = 6;  // Number of calibration points
+
+    // Bound input to valid range
+    if (analogValue <= 0) return 0.0f;
+    if (analogValue >= 4095) return 5.0f;
+
+    // Find the right calibration segment
+    int segment = 0;
+    while (segment < numCalPoints - 1 && analogValue > calADC[segment + 1]) {
+        segment++;
     }
-    else if (analogValue <= 0) {
-        return 0.0f;  // Minimum reading
-    }
-    
-    // Piecewise linear interpolation between calibration points
-    if (analogValue < 1054) {
-        // Between 0V and 1V
-        return (float)analogValue * 1.0f / 1054.0f;
-    }
-    else if (analogValue < 2287) {
-        // Between 1V and 2V
-        return 1.0f + (float)(analogValue - 1054) * 1.0f / (2287 - 1054);
-    }
-    else if (analogValue < 3769) {
-        // Between 2V and 3V
-        return 2.0f + (float)(analogValue - 2287) * 1.0f / (3769 - 2287);
-    }
-    else {
-        // Between 3V and 5V (max)
-        return 3.0f + (float)(analogValue - 3769) * 2.0f / (4096 - 3769);
-    }
+
+    // Linear interpolation within the segment
+    float fraction = (float)(analogValue - calADC[segment]) /
+        (float)(calADC[segment + 1] - calADC[segment]);
+
+    float voltage = calVolts[segment] + fraction * (calVolts[segment + 1] - calVolts[segment]);
+
+    return voltage;
 }
 
-// Calculate percentage based on 0-5V range (remains unchanged)
-// Calculate percentage based on 0-5V range
+
+// Correct percentage calculation for 0-5V range
 int calculatePercentage(float voltage) {
-    // Ensure voltage doesn't exceed range
+    // Ensure voltage is in the correct range
     if (voltage > 5.0f) voltage = 5.0f;
     if (voltage < 0.0f) voltage = 0.0f;
-    
+
+    // Calculate percentage based on 0-5V range
     return (int)((voltage / 5.0f) * 100.0f);
 }
 
@@ -1412,6 +1815,7 @@ void setupWebServer() {
     server.on("/api/relay", HTTP_POST, handleRelayControl);
     server.on("/api/schedules", HTTP_GET, handleSchedules);
     server.on("/api/schedules", HTTP_POST, handleUpdateSchedule);
+    server.on("/api/evaluate-input-schedules", HTTP_GET, handleEvaluateInputSchedules);
     server.on("/api/analog-triggers", HTTP_GET, handleAnalogTriggers);
     server.on("/api/analog-triggers", HTTP_POST, handleUpdateAnalogTriggers);
     server.on("/api/config", HTTP_GET, handleConfig);
@@ -1432,7 +1836,7 @@ void setupWebServer() {
 
     // Diagnostic endpoints
     server.on("/api/i2c/scan", HTTP_GET, handleI2CScan);
-    
+
     // Add interrupt configuration endpoint
     server.on("/api/interrupts", HTTP_GET, handleInterrupts);
     server.on("/api/interrupts", HTTP_POST, handleUpdateInterrupts);
@@ -1697,7 +2101,7 @@ void saveWiFiCredentials(String ssid, String password) {
             EEPROM.write(EEPROM_WIFI_SSID_ADDR + i, ssid[i]);
         }
 
-                else {
+        else {
             EEPROM.write(EEPROM_WIFI_SSID_ADDR + i, 0);
         }
     }
@@ -1920,6 +2324,19 @@ bool readInputs() {
     bool anyChanged = false;
     bool success = true;
 
+    // Store previous input states to check for changes
+    bool prevInputStates[16];
+    bool prevDirectInputStates[3];
+
+    // Copy current states to previous states
+    for (int i = 0; i < 16; i++) {
+        prevInputStates[i] = inputStates[i];
+    }
+
+    for (int i = 0; i < 3; i++) {
+        prevDirectInputStates[i] = directInputStates[i];
+    }
+
     // Read from PCF8574 input expanders using the PCF8574 library
     // Inputs 1-8 (IC1)
     for (int i = 0; i < 8; i++) {
@@ -1942,6 +2359,11 @@ bool readInputs() {
             inputStates[i] = newState;
             anyChanged = true;
             debugPrintln("Input " + String(i + 1) + " changed to " + String(newState ? "HIGH" : "LOW"));
+
+            // Process this specific input change
+            if (inputInterruptsEnabled && interruptConfigs[i].enabled) {
+                processInputChange(i, newState);
+            }
         }
     }
 
@@ -1966,6 +2388,11 @@ bool readInputs() {
             inputStates[i + 8] = newState;
             anyChanged = true;
             debugPrintln("Input " + String(i + 9) + " changed to " + String(newState ? "HIGH" : "LOW"));
+
+            // Process this specific input change
+            if (inputInterruptsEnabled && interruptConfigs[i + 8].enabled) {
+                processInputChange(i + 8, newState);
+            }
         }
     }
 
@@ -1990,6 +2417,12 @@ bool readInputs() {
         directInputStates[2] = ht3;
         anyChanged = true;
         debugPrintln("HT3 changed to " + String(ht3 ? "HIGH" : "LOW"));
+    }
+
+    // If any changes detected but not already processed by interrupt handlers,
+    // check if there are any input-based schedules to run
+    if (anyChanged && !inputInterruptsEnabled) {
+        checkInputBasedSchedules();
     }
 
     // If any changes detected, print the current I/O states for debugging
@@ -2048,22 +2481,21 @@ bool writeOutputs() {
     return success;
 }
 
-// Read analog input and scale for 0-5V range
 // Read analog input with improved noise reduction
 int readAnalogInput(uint8_t index) {
     int pinMapping[] = { ANALOG_PIN_1, ANALOG_PIN_2, ANALOG_PIN_3, ANALOG_PIN_4 };
-    
+
     if (index >= 4) return 0;
-    
+
     // Take multiple readings and average them for better stability
-    const int numReadings = 5;
+    const int numReadings = 10;  // Increased from 5 to 10 for better accuracy
     int total = 0;
-    
+
     for (int i = 0; i < numReadings; i++) {
         total += analogRead(pinMapping[index]);
         delay(1);  // Short delay between readings
     }
-    
+
     return total / numReadings;
 }
 
@@ -2196,7 +2628,7 @@ void initializeDefaultConfig() {
 // Web server root handler
 void handleWebRoot() {
     server.sendHeader("Location", "/index.html", true);
-        server.send(302, "text/plain", "");
+    server.send(302, "text/plain", "");
 }
 
 // Handle 404 not found
@@ -2447,17 +2879,17 @@ void handleUpdateSchedule() {
                 schedules[id].enabled = scheduleJson["enabled"];
                 strlcpy(schedules[id].name, scheduleJson["name"] | "Schedule", 32);
                 schedules[id].triggerType = scheduleJson["triggerType"] | 0;
-                
+
                 // Time-based fields
                 schedules[id].days = scheduleJson["days"] | 0;
                 schedules[id].hour = scheduleJson["hour"] | 0;
                 schedules[id].minute = scheduleJson["minute"] | 0;
-                
+
                 // Input-based fields
                 schedules[id].inputMask = scheduleJson["inputMask"] | 0;
                 schedules[id].inputStates = scheduleJson["inputStates"] | 0;
                 schedules[id].logic = scheduleJson["logic"] | 0;
-                
+
                 // Common fields
                 schedules[id].action = scheduleJson["action"] | 0;
                 schedules[id].targetType = scheduleJson["targetType"] | 0;
@@ -2478,10 +2910,45 @@ void handleUpdateSchedule() {
                 response = "{\"status\":\"success\"}";
             }
         }
+        else if (!error && doc.containsKey("id") && doc.containsKey("delete")) {
+            // Handle delete operation
+            int id = doc["id"].as<int>();
+            bool deleteSchedule = doc["delete"];
+
+            if (id >= 0 && id < MAX_SCHEDULES && deleteSchedule) {
+                // Reset this schedule slot to default values
+                schedules[id].enabled = false;
+                schedules[id].triggerType = 0;
+                schedules[id].days = 0;
+                schedules[id].hour = 0;
+                schedules[id].minute = 0;
+                schedules[id].inputMask = 0;
+                schedules[id].inputStates = 0;
+                schedules[id].logic = 0;
+                schedules[id].action = 0;
+                schedules[id].targetType = 0;
+                schedules[id].targetId = 0;
+                snprintf(schedules[id].name, 32, "Schedule %d", id + 1);
+
+                saveConfiguration();
+                response = "{\"status\":\"success\"}";
+            }
+        }
     }
 
     server.send(200, "application/json", response);
 }
+
+
+// Handler for evaluating input-based schedules on demand
+void handleEvaluateInputSchedules() {
+    checkInputBasedSchedules();
+
+    // Send response
+    String response = "{\"status\":\"success\",\"message\":\"Input-based schedules evaluated\"}";
+    server.send(200, "application/json", response);
+}
+
 
 // Handle analog triggers API
 void handleAnalogTriggers() {
@@ -3258,25 +3725,25 @@ String processCommand(String command) {
             response += String(i + 1) + " (Input " + String(i + 1) + "): ";
             response += interruptConfigs[i].enabled ? "Enabled" : "Disabled";
             response += ", Priority: ";
-            
+
             switch (interruptConfigs[i].priority) {
-                case INPUT_PRIORITY_HIGH: response += "High"; break;
-                case INPUT_PRIORITY_MEDIUM: response += "Medium"; break;
-                case INPUT_PRIORITY_LOW: response += "Low"; break;
-                case INPUT_PRIORITY_NONE: response += "None (Polling)"; break;
-                default: response += "Unknown";
+            case INPUT_PRIORITY_HIGH: response += "High"; break;
+            case INPUT_PRIORITY_MEDIUM: response += "Medium"; break;
+            case INPUT_PRIORITY_LOW: response += "Low"; break;
+            case INPUT_PRIORITY_NONE: response += "None (Polling)"; break;
+            default: response += "Unknown";
             }
-            
+
             response += ", Trigger: ";
             switch (interruptConfigs[i].triggerType) {
-                case INTERRUPT_TRIGGER_RISING: response += "Rising Edge"; break;
-                case INTERRUPT_TRIGGER_FALLING: response += "Falling Edge"; break;
-                case INTERRUPT_TRIGGER_CHANGE: response += "Change (Any Edge)"; break;
-                case INTERRUPT_TRIGGER_HIGH_LEVEL: response += "High Level"; break;
-                case INTERRUPT_TRIGGER_LOW_LEVEL: response += "Low Level"; break;
-                default: response += "Unknown";
+            case INTERRUPT_TRIGGER_RISING: response += "Rising Edge"; break;
+            case INTERRUPT_TRIGGER_FALLING: response += "Falling Edge"; break;
+            case INTERRUPT_TRIGGER_CHANGE: response += "Change (Any Edge)"; break;
+            case INTERRUPT_TRIGGER_HIGH_LEVEL: response += "High Level"; break;
+            case INTERRUPT_TRIGGER_LOW_LEVEL: response += "Low Level"; break;
+            default: response += "Unknown";
             }
-            
+
             response += "\n";
         }
         response += "\nInterrupt System: " + String(inputInterruptsEnabled ? "Active" : "Inactive");
@@ -3420,24 +3887,24 @@ String processCommand(String command) {
             response += String(analogVoltages[i], 2) + "V, ";
             response += String(calculatePercentage(analogVoltages[i])) + "%\n";
         }
-        
+
         // Add interrupt status summary
         response += "\nInterrupt System: " + String(inputInterruptsEnabled ? "Active" : "Inactive") + "\n";
         int highCount = 0, medCount = 0, lowCount = 0, noneCount = 0;
         for (int i = 0; i < 16; i++) {
             if (!interruptConfigs[i].enabled) continue;
-            
+
             switch (interruptConfigs[i].priority) {
-                case INPUT_PRIORITY_HIGH: highCount++; break;
-                case INPUT_PRIORITY_MEDIUM: medCount++; break;
-                case INPUT_PRIORITY_LOW: lowCount++; break;
-                case INPUT_PRIORITY_NONE: noneCount++; break;
+            case INPUT_PRIORITY_HIGH: highCount++; break;
+            case INPUT_PRIORITY_MEDIUM: medCount++; break;
+            case INPUT_PRIORITY_LOW: lowCount++; break;
+            case INPUT_PRIORITY_NONE: noneCount++; break;
             }
         }
-        response += "Configured interrupts: High=" + String(highCount) + 
-                    ", Med=" + String(medCount) + 
-                    ", Low=" + String(lowCount) + 
-                    ", Polling=" + String(noneCount) + "\n";
+        response += "Configured interrupts: High=" + String(highCount) +
+            ", Med=" + String(medCount) +
+            ", Low=" + String(lowCount) +
+            ", Polling=" + String(noneCount) + "\n";
 
         return response;
     }
@@ -3497,14 +3964,15 @@ String processCommand(String command) {
             int index = inputNum - 1;
             interruptConfigs[index].enabled = true;
             saveInterruptConfigs();
-            
+
             if (inputInterruptsEnabled) {
                 setupInputInterrupts(); // Reconfigure interrupts
-            } else {
+            }
+            else {
                 inputInterruptsEnabled = true; // Enable the interrupt system
                 setupInputInterrupts();
             }
-            
+
             return "Interrupt enabled for input " + String(inputNum);
         }
         return "ERROR: Invalid input number. Must be between 1-16.";
@@ -3515,7 +3983,7 @@ String processCommand(String command) {
             int index = inputNum - 1;
             interruptConfigs[index].enabled = false;
             saveInterruptConfigs();
-            
+
             // Check if any interrupts are still enabled
             bool anyEnabled = false;
             for (int i = 0; i < 16; i++) {
@@ -3524,13 +3992,14 @@ String processCommand(String command) {
                     break;
                 }
             }
-            
+
             if (anyEnabled && inputInterruptsEnabled) {
                 setupInputInterrupts(); // Reconfigure interrupts
-            } else if (!anyEnabled) {
+            }
+            else if (!anyEnabled) {
                 disableInputInterrupts(); // Disable the entire interrupt system
             }
-            
+
             return "Interrupt disabled for input " + String(inputNum);
         }
         return "ERROR: Invalid input number. Must be between 1-16.";
@@ -3538,34 +4007,38 @@ String processCommand(String command) {
     else if (command.startsWith("INTERRUPT PRIORITY ")) {
         String params = command.substring(19);
         int spacePos = params.indexOf(' ');
-        
+
         if (spacePos > 0) {
             int inputNum = params.substring(0, spacePos).toInt();
             String priorityStr = params.substring(spacePos + 1);
             priorityStr.toUpperCase();
-            
+
             uint8_t priority = INPUT_PRIORITY_MEDIUM; // Default medium
             if (priorityStr == "HIGH") {
                 priority = INPUT_PRIORITY_HIGH;
-            } else if (priorityStr == "MEDIUM") {
+            }
+            else if (priorityStr == "MEDIUM") {
                 priority = INPUT_PRIORITY_MEDIUM;
-            } else if (priorityStr == "LOW") {
+            }
+            else if (priorityStr == "LOW") {
                 priority = INPUT_PRIORITY_LOW;
-            } else if (priorityStr == "NONE") {
+            }
+            else if (priorityStr == "NONE") {
                 priority = INPUT_PRIORITY_NONE;
-            } else {
+            }
+            else {
                 return "ERROR: Invalid priority. Use HIGH, MEDIUM, LOW, or NONE.";
             }
-            
+
             if (inputNum >= 1 && inputNum <= 16) {
                 int index = inputNum - 1;
                 interruptConfigs[index].priority = priority;
                 saveInterruptConfigs();
-                
+
                 if (inputInterruptsEnabled) {
                     setupInputInterrupts(); // Reconfigure interrupts
                 }
-                
+
                 return "Priority for input " + String(inputNum) + " set to " + priorityStr;
             }
             return "ERROR: Invalid input number. Must be between 1-16.";
@@ -3575,36 +4048,41 @@ String processCommand(String command) {
     else if (command.startsWith("INTERRUPT TRIGGER ")) {
         String params = command.substring(18);
         int spacePos = params.indexOf(' ');
-        
+
         if (spacePos > 0) {
             int inputNum = params.substring(0, spacePos).toInt();
             String triggerStr = params.substring(spacePos + 1);
             triggerStr.toUpperCase();
-            
+
             uint8_t triggerType = INTERRUPT_TRIGGER_CHANGE; // Default to change
             if (triggerStr == "RISING" || triggerStr == "RISE") {
                 triggerType = INTERRUPT_TRIGGER_RISING;
-            } else if (triggerStr == "FALLING" || triggerStr == "FALL") {
+            }
+            else if (triggerStr == "FALLING" || triggerStr == "FALL") {
                 triggerType = INTERRUPT_TRIGGER_FALLING;
-            } else if (triggerStr == "CHANGE" || triggerStr == "BOTH") {
+            }
+            else if (triggerStr == "CHANGE" || triggerStr == "BOTH") {
                 triggerType = INTERRUPT_TRIGGER_CHANGE;
-            } else if (triggerStr == "HIGH" || triggerStr == "HIGH_LEVEL") {
+            }
+            else if (triggerStr == "HIGH" || triggerStr == "HIGH_LEVEL") {
                 triggerType = INTERRUPT_TRIGGER_HIGH_LEVEL;
-            } else if (triggerStr == "LOW" || triggerStr == "LOW_LEVEL") {
+            }
+            else if (triggerStr == "LOW" || triggerStr == "LOW_LEVEL") {
                 triggerType = INTERRUPT_TRIGGER_LOW_LEVEL;
-            } else {
+            }
+            else {
                 return "ERROR: Invalid trigger type. Use RISING, FALLING, CHANGE, HIGH_LEVEL, or LOW_LEVEL.";
             }
-            
+
             if (inputNum >= 1 && inputNum <= 16) {
                 int index = inputNum - 1;
                 interruptConfigs[index].triggerType = triggerType;
                 saveInterruptConfigs();
-                
+
                 if (inputInterruptsEnabled) {
                     setupInputInterrupts(); // Reconfigure interrupts
                 }
-                
+
                 return "Trigger type for input " + String(inputNum) + " set to " + triggerStr;
             }
             return "ERROR: Invalid input number. Must be between 1-16.";
@@ -3631,7 +4109,8 @@ String processCommand(String command) {
 
     return "ERROR: Unknown command. Type HELP for commands.";
 }
-// Improved checkSchedules function with better logging and debug
+
+// Improved checkSchedules function to focus on time-based triggers only
 void checkSchedules() {
     // Get current time
     DateTime now;
@@ -3657,178 +4136,102 @@ void checkSchedules() {
     static int lastMinutePrinted = -1;
     if (now.minute() != lastMinutePrinted) {
         lastMinutePrinted = now.minute();
-        debugPrintln("Current time: " + String(now.year()) + "-" + 
-                    String(now.month()) + "-" + 
-                    String(now.day()) + " " + 
-                    String(now.hour()) + ":" + 
-                    String(now.minute()) + ":" + 
-                    String(now.second()));
+        debugPrintln("Current time: " + String(now.year()) + "-" +
+            String(now.month()) + "-" +
+            String(now.day()) + " " +
+            String(now.hour()) + ":" +
+            String(now.minute()) + ":" +
+            String(now.second()));
         debugPrintln("Day of week: " + String(currentDayOfWeek) + ", Day bit: " + String(currentDayBit, BIN));
-    }
-
-    // Array to store previous input states (for edge detection)
-    static uint32_t prevInputState = 0;
-    
-    // Calculate current state of all inputs as a single 32-bit value
-    uint32_t currentInputState = 0;
-    
-    // Add digital inputs (bits 0-15)
-    for (int i = 0; i < 16; i++) {
-        if (inputStates[i]) {
-            currentInputState |= (1UL << i);
-        }
-    }
-    
-    // Add direct inputs HT1-HT3 (bits 16-18)
-    for (int i = 0; i < 3; i++) {
-        if (directInputStates[i]) {
-            currentInputState |= (1UL << (16 + i));
-        }
     }
 
     // Check each schedule
     for (int i = 0; i < MAX_SCHEDULES; i++) {
-        if (schedules[i].enabled) {
-            bool timeTrigger = false;
-            bool inputTrigger = false;
-            
-            // Check time-based condition (for triggerType 0 or 2)
-            if (schedules[i].triggerType == 0 || schedules[i].triggerType == 2) {
-                // Check if schedule should run today
-                if (schedules[i].days & currentDayBit) {
-                    // Check if it's time to run
-                    if (now.hour() == schedules[i].hour && now.minute() == schedules[i].minute && now.second() < 5) {
-                        timeTrigger = true;
-                        debugPrintln("Time trigger met for schedule " + String(i) + ": " + String(schedules[i].name));
-                        debugPrintln("Current time: " + String(now.hour()) + ":" + String(now.minute()) + 
-                                   ", Schedule time: " + String(schedules[i].hour) + ":" + String(schedules[i].minute) +
-                                   ", Day mask: " + String(schedules[i].days, BIN));
-                    }
-                }
-            }
-            
-            // Check input-based condition (for triggerType 1 or 2)
-            if (schedules[i].triggerType == 1 || schedules[i].triggerType == 2) {
-                if (schedules[i].inputMask != 0) {
-                    bool inputConditionMet = false;
-                    bool anyInputChanged = false;
-                    
-                    // Check each bit in the inputMask
-                    for (int bitPos = 0; bitPos < 19; bitPos++) {
-                        uint32_t bitMask = 1UL << bitPos;
-                        
-                        // If this bit is part of our input mask, check its state
-                        if (schedules[i].inputMask & bitMask) {
-                            bool desiredState = (schedules[i].inputStates & bitMask) != 0;
-                            bool currentState = (currentInputState & bitMask) != 0;
-                            bool previousState = (prevInputState & bitMask) != 0;
-                            
-                            // Check if this input has changed state
-                            if (currentState != previousState) {
-                                anyInputChanged = true;
-                            }
-                            
-                            // Evaluate condition based on logic
-                            if (schedules[i].logic == 0) { // AND logic
-                                if (currentState != desiredState) {
-                                    inputConditionMet = false;
-                                    break; // Break early for AND logic if one condition fails
-                                }
-                                inputConditionMet = true;
-                            } else { // OR logic
-                                if (currentState == desiredState) {
-                                    inputConditionMet = true;
-                                    break; // Break early for OR logic if one condition is met
-                                }
-                            }
-                        }
-                    }
-                    
-                    // For input trigger, we need at least one input to have changed state
-                    if (inputConditionMet && anyInputChanged) {
-                        inputTrigger = true;
-                        debugPrintln("Input trigger met for schedule: " + String(schedules[i].name));
-                    }
-                }
-            }
-            
-            // Determine if we should execute the schedule based on trigger type
-            bool shouldTrigger = false;
-            
-            switch (schedules[i].triggerType) {
-                case 0: // Time-based only
-                    shouldTrigger = timeTrigger;
-                    break;
-                
-                case 1: // Input-based only
-                    shouldTrigger = inputTrigger;
-                    break;
-                
-                case 2: // Combined (both time and input conditions must be met)
-                    shouldTrigger = timeTrigger && inputTrigger;
-                    break;
-            }
-            
-            // Execute schedule action if triggered
-            if (shouldTrigger) {
-                debugPrintln("Executing schedule: " + String(schedules[i].name));
-                
-                // Perform the scheduled action
-                if (schedules[i].targetType == 0) {
-                    // Single output
-                    uint8_t relay = schedules[i].targetId;
-                    if (relay < 16) {
-                        debugPrintln("Setting single relay " + String(relay) + " to " + 
-                                  (schedules[i].action == 0 ? "OFF" : 
-                                   schedules[i].action == 1 ? "ON" : "TOGGLE"));
-                        
-                        if (schedules[i].action == 0) {        // OFF
-                            outputStates[relay] = false;
-                        }
-                        else if (schedules[i].action == 1) {   // ON
-                            outputStates[relay] = true;
-                        }
-                        else if (schedules[i].action == 2) {   // TOGGLE
-                            outputStates[relay] = !outputStates[relay];
-                        }
-                    }
-                }
-                else if (schedules[i].targetType == 1) {
-                    // Multiple outputs (using bitmask)
-                    debugPrintln("Setting multiple relays with mask: " + String(schedules[i].targetId, BIN));
-                    
-                    for (int j = 0; j < 16; j++) {
-                        if (schedules[i].targetId & (1 << j)) {
-                            debugPrintln("Setting relay " + String(j) + " to " + 
-                                      (schedules[i].action == 0 ? "OFF" : 
-                                       schedules[i].action == 1 ? "ON" : "TOGGLE"));
-                            
-                            if (schedules[i].action == 0) {        // OFF
-                                outputStates[j] = false;
-                            }
-                            else if (schedules[i].action == 1) {   // ON
-                                outputStates[j] = true;
-                            }
-                            else if (schedules[i].action == 2) {   // TOGGLE
-                                outputStates[j] = !outputStates[j];
-                            }
-                        }
-                    }
-                }
+        if (!schedules[i].enabled) {
+            continue;
+        }
 
-                // Update outputs
-                if (!writeOutputs()) {
-                    debugPrintln("ERROR: Failed to write outputs when executing schedule");
-                }
+        // We only care about time-based schedules here (type 0) or combined schedules (type 2)
+        if (schedules[i].triggerType == 0 || schedules[i].triggerType == 2) {
+            // Check if schedule should run today
+            if (schedules[i].days & currentDayBit) {
+                // Check if it's time to run (only check the first 5 seconds of the minute)
+                if (now.hour() == schedules[i].hour && now.minute() == schedules[i].minute && now.second() < 5) {
+                    debugPrintln("Time trigger met for schedule " + String(i) + ": " + String(schedules[i].name));
 
-                // Broadcast update
-                broadcastUpdate();
+                    // For time-only schedules, execute directly
+                    if (schedules[i].triggerType == 0) {
+                        executeScheduleAction(i);
+                    }
+                    // For combined schedules, check input conditions too
+                    else if (schedules[i].triggerType == 2) {
+                        // Call checkInputBasedSchedules which handles combined schedules
+                        checkInputBasedSchedules();
+                    }
+                }
             }
         }
     }
-    
-    // Update previous input state for the next iteration
-    prevInputState = currentInputState;
+}
+
+// Execute a schedule action by index
+void executeSchedule(int scheduleIndex) {
+    if (scheduleIndex < 0 || scheduleIndex >= MAX_SCHEDULES || !schedules[scheduleIndex].enabled) {
+        return;
+    }
+
+    debugPrintln("Executing schedule: " + String(schedules[scheduleIndex].name));
+
+    // Perform the scheduled action
+    if (schedules[scheduleIndex].targetType == 0) {
+        // Single output
+        uint8_t relay = schedules[scheduleIndex].targetId;
+        if (relay < 16) {
+            debugPrintln("Setting single relay " + String(relay) + " to " +
+                (schedules[scheduleIndex].action == 0 ? "OFF" :
+                    schedules[scheduleIndex].action == 1 ? "ON" : "TOGGLE"));
+
+            if (schedules[scheduleIndex].action == 0) {        // OFF
+                outputStates[relay] = false;
+            }
+            else if (schedules[scheduleIndex].action == 1) {   // ON
+                outputStates[relay] = true;
+            }
+            else if (schedules[scheduleIndex].action == 2) {   // TOGGLE
+                outputStates[relay] = !outputStates[relay];
+            }
+        }
+    }
+    else if (schedules[scheduleIndex].targetType == 1) {
+        // Multiple outputs (using bitmask)
+        debugPrintln("Setting multiple relays with mask: " + String(schedules[scheduleIndex].targetId, BIN));
+
+        for (int j = 0; j < 16; j++) {
+            if (schedules[scheduleIndex].targetId & (1 << j)) {
+                debugPrintln("Setting relay " + String(j) + " to " +
+                    (schedules[scheduleIndex].action == 0 ? "OFF" :
+                        schedules[scheduleIndex].action == 1 ? "ON" : "TOGGLE"));
+
+                if (schedules[scheduleIndex].action == 0) {        // OFF
+                    outputStates[j] = false;
+                }
+                else if (schedules[scheduleIndex].action == 1) {   // ON
+                    outputStates[j] = true;
+                }
+                else if (schedules[scheduleIndex].action == 2) {   // TOGGLE
+                    outputStates[j] = !outputStates[j];
+                }
+            }
+        }
+    }
+
+    // Update outputs
+    if (!writeOutputs()) {
+        debugPrintln("ERROR: Failed to write outputs when executing schedule");
+    }
+
+    // Broadcast update
+    broadcastUpdate();
 }
 
 // Check analog triggers against current values

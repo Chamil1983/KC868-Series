@@ -174,6 +174,7 @@ function initApp() {
     initInputControls();
     initScheduleUI();
     initTriggerUI();
+    initInputInterruptsUI(); // Add this line to initialize Input Interrupts UI
     initSettingsUI();
     initDiagnosticsUI();
     initCommunicationUI();
@@ -259,7 +260,7 @@ function setupDataFreshnessMonitor() {
     }, 3000); // Check every 3 seconds
 }
 
-// Navigation setup
+// Navigation setup with improved analog inputs support
 function setupNavigation() {
     console.log(`Found ${navLinks.length} navigation links`);
     console.log(`Found ${sections.length} sections`);
@@ -291,9 +292,18 @@ function setupNavigation() {
                 targetSection.classList.add('active');
                 console.log(`Activated section: ${targetId}`);
                 
-                // If analog inputs section, update chart
-                if (targetId === 'analog-inputs' && analogChart) {
-                    analogChart.update();
+                // If analog inputs section, ensure displays are initialized and updated
+                if (targetId === 'analog-inputs') {
+                    // Make sure analog visual grid exists
+                    ensureAnalogVisualGrid();
+                    
+                    // Refresh analog display
+                    refreshAnalogDisplay();
+                    
+                    // Update chart if available
+                    if (analogChart) {
+                        analogChart.update();
+                    }
                 }
                 
                 // Load protocol-specific settings if communication section
@@ -847,7 +857,63 @@ function saveProtocolConfiguration(protocol) {
     });
 }
 
-// Enhanced status update handler for real-time updates
+// New function to ensure analog visualizations are created properly
+function ensureAnalogVisualGrid() {
+    // Check if visual grid exists and create if needed
+    const visualGrid = document.querySelector('.analog-visual-grid');
+    if (visualGrid && visualGrid.children.length === 0) {
+        createVisualAnalogGrid();
+    }
+}
+
+// New function to completely refresh the analog display
+function refreshAnalogDisplay() {
+    // Check if we are on the analog inputs page
+    if (document.getElementById('analog-inputs').classList.contains('active')) {
+        console.log("Refreshing analog display with data:", systemData.analog);
+        
+        // Ensure the analog grid exists and is populated
+        const analogInputsGrid = document.getElementById('analog-inputs-grid');
+        if (analogInputsGrid) {
+            analogInputsGrid.innerHTML = '';
+            
+            // Create analog cards if we have analog data
+            if (systemData.analog && systemData.analog.length > 0) {
+                systemData.analog.forEach(input => {
+                    const analogCard = document.createElement('div');
+                    analogCard.className = 'analog-card';
+                    analogCard.setAttribute('data-input', input.id);
+                    
+                    // Format voltage to 2 decimal places for display
+                    const voltage = input.voltage.toFixed(2);
+                    
+                    analogCard.innerHTML = `
+                        <div class="analog-header">
+                            <h4>A${input.id + 1}</h4>
+                            <span class="analog-value">${input.value} (${voltage}V)</span>
+                        </div>
+                        <div class="analog-percentage">${input.percentage}%</div>
+                        <div class="analog-progress">
+                            <div class="analog-fill" style="width: ${input.percentage}%"></div>
+                        </div>
+                    `;
+                    analogInputsGrid.appendChild(analogCard);
+                });
+                
+                // Make sure the analog bar visualizations are created and updated
+                updateAnalogVisualizations(systemData.analog);
+                
+                // Update the chart
+                updateAnalogChart();
+            } else {
+                // If no analog data is available, display a message
+                analogInputsGrid.innerHTML = '<div class="no-data">No analog input data available</div>';
+            }
+        }
+    }
+}
+
+// Improved handleStatusUpdate function with better analog display handling
 function handleStatusUpdate(data) {
     // Update outputs
     if (data.outputs) {
@@ -873,7 +939,7 @@ function handleStatusUpdate(data) {
         }
     }
     
-    // Update inputs - improved to ensure all visual indicators are updated
+    // Update inputs
     if (data.inputs) {
         data.inputs.forEach(input => {
             updateInputState(input.id, input.state);
@@ -886,7 +952,6 @@ function handleStatusUpdate(data) {
             if (activeInputs.length > 0 || (data.direct_inputs && data.direct_inputs.some(i => i.state))) {
                 activeInputsElement.innerHTML = '';
                 
-                // Add active digital inputs
                 activeInputs.forEach(input => {
                     const div = document.createElement('div');
                     div.className = 'input-item';
@@ -894,7 +959,6 @@ function handleStatusUpdate(data) {
                     activeInputsElement.appendChild(div);
                 });
                 
-                // Add active direct inputs
                 if (data.direct_inputs) {
                     data.direct_inputs
                         .filter(input => input.state)
@@ -918,15 +982,27 @@ function handleStatusUpdate(data) {
         });
     }
     
-    // Update analog inputs
+    // Update analog inputs with improved handling
     if (data.analog) {
+        // Store data in systemData before processing it
+        if (!systemData.analog) {
+            systemData.analog = [];
+        }
+        
+        // Update analog data in systemData
         data.analog.forEach((input, index) => {
+            if (!systemData.analog[index]) {
+                systemData.analog[index] = {};
+            }
+            systemData.analog[index] = input;
+            
+            // Update UI elements
             updateAnalogValue(index, input.value);
         });
         
-        // Update analog chart if we're on the analog inputs page
+        // If we're on the analog inputs page, make sure to fully refresh the display
         if (document.getElementById('analog-inputs').classList.contains('active')) {
-            updateAnalogChart();
+            refreshAnalogDisplay();
         }
     }
     
@@ -938,6 +1014,7 @@ function handleStatusUpdate(data) {
     // Update systemData with the latest data
     systemData = data;
 }
+
 
 // Initialize relay controls
 function initRelayControls() {
@@ -1075,15 +1152,14 @@ function createVisualAnalogGrid() {
     }
 }
 
-// Initialize Schedule UI - Fixed to properly show the Add Schedule button and handle events
-// Modified part of the initScheduleUI function for input checkboxes
+// Initialize Schedule UI - Modified to support both HIGH and LOW relay conditions
 function initScheduleUI() {
     console.log("Initializing Schedule UI");
     
     // Load schedules from server
     fetchSchedules();
     
-    // Setup add schedule button - Make sure this works correctly
+    // Setup add schedule button
     const addScheduleBtn = document.getElementById('add-schedule');
     if (addScheduleBtn) {
         console.log("Add schedule button found, adding event listener");
@@ -1095,10 +1171,17 @@ function initScheduleUI() {
         console.error("Add schedule button not found!");
     }
     
-    // Setup modal close buttons
-    document.querySelectorAll('#schedule-modal .close-modal, #schedule-modal .close-btn').forEach(btn => {
+    // Setup modal close buttons - More robust approach
+    const closeButtons = document.querySelectorAll('#schedule-modal .close-modal, #schedule-modal .close-btn');
+    console.log(`Found ${closeButtons.length} close buttons`);
+    
+    closeButtons.forEach(btn => {
         btn.addEventListener('click', function() {
-            document.getElementById('schedule-modal').style.display = 'none';
+            console.log("Close button clicked");
+            const modal = document.getElementById('schedule-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
         });
     });
     
@@ -1109,6 +1192,8 @@ function initScheduleUI() {
             e.preventDefault();
             saveSchedule();
         });
+    } else {
+        console.error("Schedule form not found!");
     }
     
     // Setup trigger type change
@@ -1125,13 +1210,27 @@ function initScheduleUI() {
         targetTypeSelect.addEventListener('change', function() {
             const singleTarget = document.getElementById('single-target');
             const multipleTargets = document.getElementById('multiple-targets');
+            const inputConditions = document.getElementById('input-condition-sections');
+            const triggerType = parseInt(document.getElementById('schedule-trigger-type').value);
             
             if (this.value === '0') {
-                singleTarget.style.display = 'block';
-                multipleTargets.style.display = 'none';
+                // Single target mode
+                if (singleTarget) singleTarget.style.display = 'block';
+                if (multipleTargets) multipleTargets.style.display = 'none';
+                if (inputConditions) inputConditions.style.display = 'none';
             } else {
-                singleTarget.style.display = 'none';
-                multipleTargets.style.display = 'block';
+                // Multiple targets mode
+                if (singleTarget) singleTarget.style.display = 'none';
+                
+                // For input-based or combined triggers, show input condition sections
+                if (triggerType === 1 || triggerType === 2) {
+                    if (multipleTargets) multipleTargets.style.display = 'none';
+                    if (inputConditions) inputConditions.style.display = 'block';
+                } else {
+                    // For time-based, show regular multiple targets
+                    if (multipleTargets) multipleTargets.style.display = 'block';
+                    if (inputConditions) inputConditions.style.display = 'none';
+                }
             }
         });
     }
@@ -1148,7 +1247,7 @@ function initScheduleUI() {
         }
     }
     
-    // Fill relay checkboxes for multiple targets
+    // Fill relay checkboxes for multiple targets (time-based)
     const checkboxGrid = document.getElementById('relay-checkboxes');
     if (checkboxGrid) {
         checkboxGrid.innerHTML = '';
@@ -1160,6 +1259,36 @@ function initScheduleUI() {
             label.appendChild(checkbox);
             label.appendChild(document.createTextNode(` Relay ${i+1}`));
             checkboxGrid.appendChild(label);
+        }
+    }
+    
+    // Fill relay checkboxes for HIGH condition (input-based)
+    const highCheckboxGrid = document.getElementById('relay-checkboxes-high');
+    if (highCheckboxGrid) {
+        highCheckboxGrid.innerHTML = '';
+        for (let i = 0; i < 16; i++) {
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.setAttribute('data-relay', i);
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(` Relay ${i+1}`));
+            highCheckboxGrid.appendChild(label);
+        }
+    }
+    
+    // Fill relay checkboxes for LOW condition (input-based)
+    const lowCheckboxGrid = document.getElementById('relay-checkboxes-low');
+    if (lowCheckboxGrid) {
+        lowCheckboxGrid.innerHTML = '';
+        for (let i = 0; i < 16; i++) {
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.setAttribute('data-relay', i);
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(` Relay ${i+1}`));
+            lowCheckboxGrid.appendChild(label);
         }
     }
     
@@ -1234,7 +1363,67 @@ function initScheduleUI() {
             htInputCheckboxes.appendChild(container);
         }
     }
+    
+    // Create input condition sections if they don't exist
+    if (!document.getElementById('input-condition-sections')) {
+        const inputTriggerSection = document.getElementById('input-trigger-section');
+        if (inputTriggerSection) {
+            const conditionsSection = document.createElement('div');
+            conditionsSection.id = 'input-condition-sections';
+            conditionsSection.style.display = 'none';
+            
+            // Create HIGH condition section
+            const highSection = document.createElement('div');
+            highSection.className = 'form-group input-condition-section';
+            highSection.innerHTML = `
+                <label>Relays to control when inputs are HIGH</label>
+                <div id="relay-checkboxes-high" class="checkbox-grid"></div>
+            `;
+            
+            // Create LOW condition section
+            const lowSection = document.createElement('div');
+            lowSection.className = 'form-group input-condition-section';
+            lowSection.innerHTML = `
+                <label>Relays to control when inputs are LOW</label>
+                <div id="relay-checkboxes-low" class="checkbox-grid"></div>
+            `;
+            
+            conditionsSection.appendChild(highSection);
+            conditionsSection.appendChild(lowSection);
+            inputTriggerSection.appendChild(conditionsSection);
+            
+            // Populate the relay checkboxes
+            const highGrid = document.getElementById('relay-checkboxes-high');
+            const lowGrid = document.getElementById('relay-checkboxes-low');
+            
+            if (highGrid && lowGrid) {
+                for (let i = 0; i < 16; i++) {
+                    // HIGH condition checkboxes
+                    const highLabel = document.createElement('label');
+                    const highCheckbox = document.createElement('input');
+                    highCheckbox.type = 'checkbox';
+                    highCheckbox.setAttribute('data-relay', i);
+                    highLabel.appendChild(highCheckbox);
+                    highLabel.appendChild(document.createTextNode(` Relay ${i+1}`));
+                    highGrid.appendChild(highLabel);
+                    
+                    // LOW condition checkboxes
+                    const lowLabel = document.createElement('label');
+                    const lowCheckbox = document.createElement('input');
+                    lowCheckbox.type = 'checkbox';
+                    lowCheckbox.setAttribute('data-relay', i);
+                    lowLabel.appendChild(lowCheckbox);
+                    lowLabel.appendChild(document.createTextNode(` Relay ${i+1}`));
+                    lowGrid.appendChild(lowLabel);
+                }
+            }
+        }
+    }
+    
+    // Initialize modal scroll fix
+    setupModalScrollFix();
 }
+
 
 // Fetch schedules from the server
 function fetchSchedules() {
@@ -1249,7 +1438,8 @@ function fetchSchedules() {
         });
 }
 
-// Enhanced renderSchedulesTable function
+
+// Enhanced renderSchedulesTable function with improved display of targets for each condition
 function renderSchedulesTable(schedules) {
     const tableBody = document.querySelector('#schedules-table tbody');
     if (!tableBody) return;
@@ -1324,21 +1514,60 @@ function renderSchedulesTable(schedules) {
         // Format action
         const actions = ['Turn OFF', 'Turn ON', 'Toggle'];
         
-        // Format target
+        // Format target based on trigger type
         let targetText = '';
-        if (schedule.targetType === 0) {
-            targetText = `Relay ${schedule.targetId + 1}`;
-        } else {
-            // Count the number of relays
-            let relayCount = 0;
-            let relayList = [];
-            for (let i = 0; i < 16; i++) {
-                if (schedule.targetId & (1 << i)) {
-                    relayCount++;
-                    relayList.push(i + 1);
+        
+        // For input-based or combined triggers, show both HIGH and LOW targets
+        if ((schedule.triggerType === 1 || schedule.triggerType === 2) && schedule.targetType === 1) {
+            // Format HIGH condition targets
+            let highTargetText = '';
+            if (schedule.targetId > 0) {
+                let highRelayCount = 0;
+                let highRelayList = [];
+                for (let i = 0; i < 16; i++) {
+                    if (schedule.targetId & (1 << i)) {
+                        highRelayCount++;
+                        highRelayList.push(i + 1);
+                    }
                 }
+                highTargetText = `<span class="target-high">HIGH: ${highRelayCount} Relays (${highRelayList.join(', ')})</span>`;
+            } else {
+                highTargetText = '<span class="target-high">HIGH: None</span>';
             }
-            targetText = `${relayCount} Relays (${relayList.join(', ')})`;
+            
+            // Format LOW condition targets
+            let lowTargetText = '';
+            if (schedule.targetIdLow > 0) {
+                let lowRelayCount = 0;
+                let lowRelayList = [];
+                for (let i = 0; i < 16; i++) {
+                    if (schedule.targetIdLow & (1 << i)) {
+                        lowRelayCount++;
+                        lowRelayList.push(i + 1);
+                    }
+                }
+                lowTargetText = `<span class="target-low">LOW: ${lowRelayCount} Relays (${lowRelayList.join(', ')})</span>`;
+            } else {
+                lowTargetText = '<span class="target-low">LOW: None</span>';
+            }
+            
+            targetText = `${highTargetText}<br>${lowTargetText}`;
+        } else {
+            // For time-based or single target, use original format
+            if (schedule.targetType === 0) {
+                targetText = `Relay ${schedule.targetId + 1}`;
+            } else {
+                // Count the number of relays
+                let relayCount = 0;
+                let relayList = [];
+                for (let i = 0; i < 16; i++) {
+                    if (schedule.targetId & (1 << i)) {
+                        relayCount++;
+                        relayList.push(i + 1);
+                    }
+                }
+                targetText = `${relayCount} Relays (${relayList.join(', ')})`;
+            }
         }
         
         row.innerHTML = `
@@ -1358,9 +1587,49 @@ function renderSchedulesTable(schedules) {
         
         tableBody.appendChild(row);
     });
+    
+    // Add styles for HIGH and LOW condition targets
+    if (!document.getElementById('condition-target-styles')) {
+        const style = document.createElement('style');
+        style.id = 'condition-target-styles';
+        style.textContent = `
+            .target-high {
+                display: block;
+                padding: 3px;
+                margin: 2px 0;
+                background-color: #e8f5e9;
+                border-left: 3px solid #4CAF50;
+            }
+            .target-low {
+                display: block;
+                padding: 3px;
+                margin: 2px 0;
+                background-color: #ffebee;
+                border-left: 3px solid #F44336;
+            }
+        `;
+        document.head.appendChild(style);
+    }
 }
 
-// Helper function to format input trigger text
+// Add a function to immediately evaluate input-based schedules after creation
+function evaluateInputBasedSchedules() {
+    // Call the server to immediately evaluate input-based schedules
+    fetch('/api/evaluate-input-schedules')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                console.log('Input-based schedules evaluated');
+            }
+        })
+        .catch(error => {
+            console.error('Error evaluating input-based schedules:', error);
+        });
+}
+
+
+
+// Helper function to format input trigger text with improved display
 function formatInputTriggerText(inputMask, inputStates, logic) {
     if (!inputMask) return 'No inputs selected';
     
@@ -1394,8 +1663,81 @@ function formatInputTriggerText(inputMask, inputStates, logic) {
     }
 }
 
-// Enhanced open schedule modal function
-// Enhanced open schedule modal function with better day selection handling
+// Updated function to update visible sections based on trigger type
+function updateVisibleTriggerSections(triggerType) {
+    const timeSection = document.getElementById('time-trigger-section');
+    const inputSection = document.getElementById('input-trigger-section');
+    const inputConditions = document.getElementById('input-condition-sections');
+    const singleTarget = document.getElementById('single-target');
+    const multipleTargets = document.getElementById('multiple-targets');
+    const targetType = document.getElementById('schedule-target-type').value;
+    
+    if (!timeSection || !inputSection) {
+        console.error('Time or input trigger sections not found!');
+        return;
+    }
+    
+    triggerType = parseInt(triggerType);
+    console.log(`Updating visible sections for trigger type: ${triggerType}`);
+    
+    switch (triggerType) {
+        case 0: // Time-based
+            timeSection.style.display = 'block';
+            inputSection.style.display = 'none';
+            if (inputConditions) inputConditions.style.display = 'none';
+            
+            // Show appropriate target section based on target type
+            if (targetType === '0') {
+                if (singleTarget) singleTarget.style.display = 'block';
+                if (multipleTargets) multipleTargets.style.display = 'none';
+            } else {
+                if (singleTarget) singleTarget.style.display = 'none';
+                if (multipleTargets) multipleTargets.style.display = 'block';
+            }
+            break;
+            
+        case 1: // Input-based
+            timeSection.style.display = 'none';
+            inputSection.style.display = 'block';
+            
+            // Show appropriate target section based on target type
+            if (targetType === '0') {
+                if (singleTarget) singleTarget.style.display = 'block';
+                if (multipleTargets) multipleTargets.style.display = 'none';
+                if (inputConditions) inputConditions.style.display = 'none';
+            } else {
+                if (singleTarget) singleTarget.style.display = 'none';
+                if (multipleTargets) multipleTargets.style.display = 'none';
+                if (inputConditions) inputConditions.style.display = 'block';
+            }
+            break;
+            
+        case 2: // Combined
+            timeSection.style.display = 'block';
+            inputSection.style.display = 'block';
+            
+            // Show appropriate target section based on target type
+            if (targetType === '0') {
+                if (singleTarget) singleTarget.style.display = 'block';
+                if (multipleTargets) multipleTargets.style.display = 'none';
+                if (inputConditions) inputConditions.style.display = 'none';
+            } else {
+                if (singleTarget) singleTarget.style.display = 'none';
+                if (multipleTargets) multipleTargets.style.display = 'none';
+                if (inputConditions) inputConditions.style.display = 'block';
+            }
+            break;
+            
+        default:
+            console.error(`Unknown trigger type: ${triggerType}`);
+            timeSection.style.display = 'block';
+            inputSection.style.display = 'none';
+            if (inputConditions) inputConditions.style.display = 'none';
+    }
+}
+
+
+// Modified openScheduleModal function to handle both HIGH and LOW relay targets
 function openScheduleModal(scheduleId = null) {
     console.log("Opening schedule modal, id:", scheduleId);
     const modal = document.getElementById('schedule-modal');
@@ -1413,58 +1755,94 @@ function openScheduleModal(scheduleId = null) {
     }
     
     // Reset form
-    document.getElementById('schedule-form').reset();
-    document.getElementById('schedule-id').value = '';
+    const scheduleForm = document.getElementById('schedule-form');
+    if (scheduleForm) {
+        scheduleForm.reset();
+    } else {
+        console.error("Schedule form not found!");
+    }
     
-    // Reset day checkboxes - ensure all checkboxes are found and reset
-    const dayCheckboxes = document.querySelectorAll('.days-selector input[type="checkbox"]');
-    console.log(`Found ${dayCheckboxes.length} day checkboxes`);
-    dayCheckboxes.forEach(checkbox => {
+    const scheduleIdField = document.getElementById('schedule-id');
+    if (scheduleIdField) {
+        scheduleIdField.value = '';
+    } else {
+        console.error("Schedule ID field not found!");
+    }
+    
+    // Reset day checkboxes
+    document.querySelectorAll('.days-selector input[type="checkbox"]').forEach(checkbox => {
         checkbox.checked = false;
     });
     
-    // Reset input checkboxes if they exist
+    // Reset input checkboxes
     document.querySelectorAll('#input-checkboxes input[type="checkbox"]').forEach(checkbox => {
         checkbox.checked = false;
         // Reset the state select
-        const stateSelect = checkbox.closest('.input-container').querySelector('.input-state-select');
-        if (stateSelect) {
-            stateSelect.value = '0';
-            stateSelect.style.display = 'none';
+        const container = checkbox.closest('.input-container');
+        if (container) {
+            const stateSelect = container.querySelector('.input-state-select');
+            if (stateSelect) {
+                stateSelect.value = '0';
+                stateSelect.style.display = 'none';
+            }
         }
     });
     
-    // Reset HT input checkboxes if they exist
+    // Reset HT input checkboxes
     document.querySelectorAll('#ht-input-checkboxes input[type="checkbox"]').forEach(checkbox => {
         checkbox.checked = false;
         // Reset the state select
-        const stateSelect = checkbox.closest('.input-container').querySelector('.input-state-select');
-        if (stateSelect) {
-            stateSelect.value = '0';
-            stateSelect.style.display = 'none';
+        const container = checkbox.closest('.input-container');
+        if (container) {
+            const stateSelect = container.querySelector('.input-state-select');
+            if (stateSelect) {
+                stateSelect.value = '0';
+                stateSelect.style.display = 'none';
+            }
         }
     });
     
-    // Reset multiple targets
+    // Reset relay checkboxes for time-based
     document.querySelectorAll('#relay-checkboxes input[type="checkbox"]').forEach(checkbox => {
         checkbox.checked = false;
     });
     
+    // Reset relay checkboxes for input-based conditions
+    document.querySelectorAll('#relay-checkboxes-high input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    document.querySelectorAll('#relay-checkboxes-low input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
     // Show time-based trigger by default and hide input-based
-    document.getElementById('time-trigger-section').style.display = 'block';
-    document.getElementById('input-trigger-section').style.display = 'none';
+    const timeSection = document.getElementById('time-trigger-section');
+    const inputSection = document.getElementById('input-trigger-section');
+    const inputConditions = document.getElementById('input-condition-sections');
+    
+    if (timeSection) timeSection.style.display = 'block';
+    if (inputSection) inputSection.style.display = 'none';
+    if (inputConditions) inputConditions.style.display = 'none';
     
     // Show single target by default
-    document.getElementById('single-target').style.display = 'block';
-    document.getElementById('multiple-targets').style.display = 'none';
+    const singleTarget = document.getElementById('single-target');
+    const multipleTargets = document.getElementById('multiple-targets');
+    
+    if (singleTarget) singleTarget.style.display = 'block';
+    if (multipleTargets) multipleTargets.style.display = 'none';
     
     // If editing an existing schedule
     if (scheduleId !== null) {
+        if (scheduleIdField) scheduleIdField.value = scheduleId;
         console.log("Loading schedule:", scheduleId);
         
         // Fetch the schedule data
         fetch(`/api/schedules?id=${scheduleId}`)
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
             .then(data => {
                 const schedules = data.schedules;
                 if (schedules && schedules.length > 0) {
@@ -1481,10 +1859,12 @@ function openScheduleModal(scheduleId = null) {
                         document.getElementById('schedule-action').value = schedule.action;
                         document.getElementById('schedule-target-type').value = schedule.targetType;
                         
+                        // Update visible sections based on trigger type first
+                        updateVisibleTriggerSections(schedule.triggerType);
+                        
                         // Set time fields if applicable
                         if (schedule.triggerType === 0 || schedule.triggerType === 2) {
-                            // Set day checkboxes - ensure proper day bit conversion
-                            console.log("Setting day checkboxes with day value:", schedule.days);
+                            // Set day checkboxes
                             for (let i = 0; i < 7; i++) {
                                 const dayBit = (1 << i);
                                 const checkbox = document.querySelector(`.days-selector input[data-day="${i}"]`);
@@ -1497,17 +1877,23 @@ function openScheduleModal(scheduleId = null) {
                             // Set time with proper padding
                             const hour = schedule.hour.toString().padStart(2, '0');
                             const minute = schedule.minute.toString().padStart(2, '0');
-                            document.getElementById('schedule-time').value = `${hour}:${minute}`;
+                            const timeField = document.getElementById('schedule-time');
+                            if (timeField) timeField.value = `${hour}:${minute}`;
                         }
                         
                         // Set input fields if applicable
                         if (schedule.triggerType === 1 || schedule.triggerType === 2) {
                             // Set input logic
-                            document.getElementById('schedule-input-logic').value = schedule.logic;
+                            const logicField = document.getElementById('schedule-input-logic');
+                            if (logicField) logicField.value = schedule.logic;
+                            
+                            console.log("Setting input checkboxes, inputMask:", schedule.inputMask);
+                            console.log("Input states:", schedule.inputStates);
                             
                             // Set digital input checkboxes
                             for (let i = 0; i < 16; i++) {
-                                if (schedule.inputMask & (1 << i)) {
+                                const bitMask = (1 << i);
+                                if (schedule.inputMask & bitMask) {
                                     const checkbox = document.querySelector(`#input-checkboxes input[data-input="${i}"]`);
                                     if (checkbox) {
                                         checkbox.checked = true;
@@ -1518,7 +1904,8 @@ function openScheduleModal(scheduleId = null) {
                                             const stateSelect = container.querySelector('.input-state-select');
                                             if (stateSelect) {
                                                 stateSelect.style.display = 'inline-block';
-                                                stateSelect.value = (schedule.inputStates & (1 << i)) !== 0 ? '1' : '0';
+                                                stateSelect.value = (schedule.inputStates & bitMask) ? '1' : '0';
+                                                console.log(`Input ${i+1} state set to ${stateSelect.value}`);
                                             }
                                         }
                                     }
@@ -1528,7 +1915,8 @@ function openScheduleModal(scheduleId = null) {
                             // Set HT input checkboxes
                             for (let i = 0; i < 3; i++) {
                                 const bitPos = i + 16;
-                                if (schedule.inputMask & (1 << bitPos)) {
+                                const bitMask = (1 << bitPos);
+                                if (schedule.inputMask & bitMask) {
                                     const checkbox = document.querySelector(`#ht-input-checkboxes input[data-input="${bitPos}"]`);
                                     if (checkbox) {
                                         checkbox.checked = true;
@@ -1539,7 +1927,8 @@ function openScheduleModal(scheduleId = null) {
                                             const stateSelect = container.querySelector('.input-state-select');
                                             if (stateSelect) {
                                                 stateSelect.style.display = 'inline-block';
-                                                stateSelect.value = (schedule.inputStates & (1 << bitPos)) !== 0 ? '1' : '0';
+                                                stateSelect.value = (schedule.inputStates & bitMask) ? '1' : '0';
+                                                console.log(`HT${i+1} state set to ${stateSelect.value}`);
                                             }
                                         }
                                     }
@@ -1547,33 +1936,58 @@ function openScheduleModal(scheduleId = null) {
                             }
                         }
                         
-                        // Show/hide sections based on trigger type
-                        updateVisibleTriggerSections(schedule.triggerType);
-                        
-                        // Set target
-                        if (schedule.targetType === 0) {
-                            // Single relay
-                            document.getElementById('single-target').style.display = 'block';
-                            document.getElementById('multiple-targets').style.display = 'none';
-                            document.getElementById('schedule-target-id').value = schedule.targetId;
-                        } else {
-                            // Multiple relays
-                            document.getElementById('single-target').style.display = 'none';
-                            document.getElementById('multiple-targets').style.display = 'block';
+                        // Set target based on trigger type and target type
+                        if (schedule.triggerType === 0 || schedule.targetType === 0) {
+                            // Time-based or single target
+                            if (schedule.targetType === 0) {
+                                if (singleTarget) singleTarget.style.display = 'block';
+                                if (multipleTargets) multipleTargets.style.display = 'none';
+                                if (inputConditions) inputConditions.style.display = 'none';
+                                
+                                const targetIdField = document.getElementById('schedule-target-id');
+                                if (targetIdField) targetIdField.value = schedule.targetId;
+                            } else {
+                                if (singleTarget) singleTarget.style.display = 'none';
+                                if (multipleTargets) multipleTargets.style.display = 'block';
+                                if (inputConditions) inputConditions.style.display = 'none';
+                                
+                                // Set relay checkboxes
+                                for (let i = 0; i < 16; i++) {
+                                    const checkbox = document.querySelector(`#relay-checkboxes input[data-relay="${i}"]`);
+                                    if (checkbox) {
+                                        checkbox.checked = (schedule.targetId & (1 << i)) !== 0;
+                                    }
+                                }
+                            }
+                        } else if ((schedule.triggerType === 1 || schedule.triggerType === 2) && schedule.targetType === 1) {
+                            // Input-based or combined with multiple targets
+                            if (singleTarget) singleTarget.style.display = 'none';
+                            if (multipleTargets) multipleTargets.style.display = 'none';
+                            if (inputConditions) inputConditions.style.display = 'block';
                             
-                            // Set relay checkboxes
+                            // Set HIGH condition relay checkboxes
                             for (let i = 0; i < 16; i++) {
-                                const checkbox = document.querySelector(`#relay-checkboxes input[data-relay="${i}"]`);
+                                const checkbox = document.querySelector(`#relay-checkboxes-high input[data-relay="${i}"]`);
                                 if (checkbox) {
                                     checkbox.checked = (schedule.targetId & (1 << i)) !== 0;
+                                }
+                            }
+                            
+                            // Set LOW condition relay checkboxes
+                            for (let i = 0; i < 16; i++) {
+                                const checkbox = document.querySelector(`#relay-checkboxes-low input[data-relay="${i}"]`);
+                                if (checkbox) {
+                                    checkbox.checked = (schedule.targetIdLow & (1 << i)) !== 0;
                                 }
                             }
                         }
                     } else {
                         console.error("Schedule with ID", scheduleId, "not found");
+                        showToast('Schedule not found', 'error');
                     }
                 } else {
                     console.error("No schedules returned from API");
+                    showToast('No schedule data found', 'error');
                 }
             })
             .catch(error => {
@@ -1583,7 +1997,7 @@ function openScheduleModal(scheduleId = null) {
     }
 }
 
-// Add this function to your initialization code
+// Improved setupModalScrollFix function to handle all modals properly
 function setupModalScrollFix() {
     // For iOS devices - fix modal scrolling issues
     const modalContents = document.querySelectorAll('.modal-content');
@@ -1614,29 +2028,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupModalScrollFix();
 });
 
-// Function to update visible sections based on trigger type
-function updateVisibleTriggerSections(triggerType) {
-    const timeSection = document.getElementById('time-trigger-section');
-    const inputSection = document.getElementById('input-trigger-section');
-    
-    switch (parseInt(triggerType)) {
-        case 0: // Time-based
-            timeSection.style.display = 'block';
-            inputSection.style.display = 'none';
-            break;
-        case 1: // Input-based
-            timeSection.style.display = 'none';
-            inputSection.style.display = 'block';
-            break;
-        case 2: // Combined
-            timeSection.style.display = 'block';
-            inputSection.style.display = 'block';
-            break;
-    }
-}
-
-// Enhanced save schedule function
-// Enhanced save schedule function with better days handling
+// Enhanced save schedule function with better days and input state handling
 function saveSchedule() {
     const scheduleId = document.getElementById('schedule-id').value;
     const isNew = scheduleId === '';
@@ -1712,19 +2104,39 @@ function saveSchedule() {
         });
     }
     
-    // Get target
+    // Get target for HIGH state
     const targetType = parseInt(document.getElementById('schedule-target-type').value);
     let targetId = 0;
+    let targetIdLow = 0;
     
-    if (targetType === 0) {
-        // Single relay
-        targetId = parseInt(document.getElementById('schedule-target-id').value);
+    // Handle the case for input-based or combined trigger types
+    if (triggerType === 1 || triggerType === 2) {
+        if (targetType === 0) {
+            // Single relay - not used for dual condition mode
+            targetId = parseInt(document.getElementById('schedule-target-id').value);
+        } else {
+            // Get relays for HIGH state
+            document.querySelectorAll('#relay-checkboxes-high input[type="checkbox"]:checked').forEach(checkbox => {
+                const relay = parseInt(checkbox.getAttribute('data-relay'));
+                targetId |= (1 << relay);
+            });
+            
+            // Get relays for LOW state
+            document.querySelectorAll('#relay-checkboxes-low input[type="checkbox"]:checked').forEach(checkbox => {
+                const relay = parseInt(checkbox.getAttribute('data-relay'));
+                targetIdLow |= (1 << relay);
+            });
+        }
     } else {
-        // Multiple relays - calculate bitmask
-        document.querySelectorAll('#relay-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
-            const relay = parseInt(checkbox.getAttribute('data-relay'));
-            targetId |= (1 << relay);
-        });
+        // For time-based triggers, use the original approach
+        if (targetType === 0) {
+            targetId = parseInt(document.getElementById('schedule-target-id').value);
+        } else {
+            document.querySelectorAll('#relay-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
+                const relay = parseInt(checkbox.getAttribute('data-relay'));
+                targetId |= (1 << relay);
+            });
+        }
     }
     
     // Create schedule object
@@ -1741,7 +2153,8 @@ function saveSchedule() {
         logic: logic,
         action: parseInt(document.getElementById('schedule-action').value),
         targetType: targetType,
-        targetId: targetId
+        targetId: targetId,
+        targetIdLow: targetIdLow
     };
     
     console.log("Saving schedule:", schedule);
@@ -1755,6 +2168,12 @@ function saveSchedule() {
     // Validate input-based schedule has at least one input selected
     if ((triggerType === 1 || triggerType === 2) && inputMask === 0) {
         showToast('Please select at least one input for input-based schedule', 'warning');
+        return;
+    }
+    
+    // For input-based or combined, ensure at least one relay is selected for HIGH or LOW
+    if ((triggerType === 1 || triggerType === 2) && targetType === 1 && (targetId === 0 && targetIdLow === 0)) {
+        showToast('Please select at least one relay for either HIGH or LOW condition', 'warning');
         return;
     }
     
@@ -1777,16 +2196,23 @@ function saveSchedule() {
     })
     .then(data => {
         if (data.status === 'success') {
-            // Always explicitly hide the modal, regardless of trigger type
+            // Hide the modal - explicitly get the modal element and hide it
             const modal = document.getElementById('schedule-modal');
             if (modal) {
                 modal.style.display = 'none';
+            } else {
+                console.error("Modal element not found!");
             }
             
             showToast(`Schedule ${isNew ? 'created' : 'updated'} successfully`, 'success');
             
             // Refresh the schedules table
             fetchSchedules();
+            
+            // For input-based schedules, immediately evaluate them
+            if (triggerType === 1 || triggerType === 2) {
+                evaluateInputBasedSchedules();
+            }
         } else {
             showToast(`Failed to ${isNew ? 'create' : 'update'} schedule: ${data.message}`, 'error');
         }
@@ -1797,8 +2223,55 @@ function saveSchedule() {
     });
 }
 
+
+
+// Add this function to automatically sync time from browser to device
+function autoSyncTimeFromBrowser() {
+    const now = new Date();
+    
+    const timeData = {
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+        day: now.getDate(),
+        hour: now.getHours(),
+        minute: now.getMinutes(),
+        second: now.getSeconds()
+    };
+    
+    // Send time to the device
+    fetch('/api/time', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(timeData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            console.log('Device time automatically synced with browser time');
+        } else {
+            console.error('Failed to auto-sync time:', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error auto-syncing time:', error);
+    });
+}
+
+// Call this function when the app initializes
+document.addEventListener('DOMContentLoaded', function() {
+    // Existing init code...
+    
+    // Auto sync time when the app loads
+    setTimeout(autoSyncTimeFromBrowser, 3000); // Small delay to ensure connectivity
+    
+    // Set up periodic time sync (every 30 minutes)
+    setInterval(autoSyncTimeFromBrowser, 30 * 60 * 1000);
+});
+
 // Global functions for schedule management
-// Enhanced editSchedule function
+// Enhanced editSchedule function - FIXED VERSION with proper input-based handling
 window.editSchedule = function(scheduleId) {
     console.log("Editing schedule:", scheduleId);
     const modal = document.getElementById('schedule-modal');
@@ -1807,13 +2280,8 @@ window.editSchedule = function(scheduleId) {
         return;
     }
     
-    // For mobile: scroll to top of modal when opening
+    // Open the modal
     modal.style.display = 'block';
-    
-    // Reset scroll position when opening modal
-    if (modal.querySelector('.modal-content')) {
-        modal.querySelector('.modal-content').scrollTop = 0;
-    }
     
     // Reset form
     document.getElementById('schedule-form').reset();
@@ -1824,30 +2292,28 @@ window.editSchedule = function(scheduleId) {
         checkbox.checked = false;
     });
     
-    // Reset input checkboxes
+    // Reset input checkboxes and hide all state selects
     document.querySelectorAll('#input-checkboxes input[type="checkbox"]').forEach(checkbox => {
         checkbox.checked = false;
-        // Reset the state select
         const container = checkbox.closest('.input-container');
         if (container) {
             const stateSelect = container.querySelector('.input-state-select');
             if (stateSelect) {
-                stateSelect.value = '0';
                 stateSelect.style.display = 'none';
+                stateSelect.value = '0';
             }
         }
     });
     
-    // Reset HT input checkboxes
+    // Reset HT input checkboxes and hide all state selects
     document.querySelectorAll('#ht-input-checkboxes input[type="checkbox"]').forEach(checkbox => {
         checkbox.checked = false;
-        // Reset the state select
         const container = checkbox.closest('.input-container');
         if (container) {
             const stateSelect = container.querySelector('.input-state-select');
             if (stateSelect) {
-                stateSelect.value = '0';
                 stateSelect.style.display = 'none';
+                stateSelect.value = '0';
             }
         }
     });
@@ -1866,12 +2332,17 @@ window.editSchedule = function(scheduleId) {
                 // Find the schedule with matching ID
                 const schedule = schedules.find(s => s.id === parseInt(scheduleId));
                 if (schedule) {
+                    console.log("Retrieved schedule data:", schedule);
+                    
                     // Set form values from schedule data
                     document.getElementById('schedule-name').value = schedule.name;
                     document.getElementById('schedule-enabled').checked = schedule.enabled;
                     document.getElementById('schedule-trigger-type').value = schedule.triggerType;
                     document.getElementById('schedule-action').value = schedule.action;
                     document.getElementById('schedule-target-type').value = schedule.targetType;
+                    
+                    // First update visible sections based on trigger type
+                    updateVisibleTriggerSections(schedule.triggerType);
                     
                     // Set time fields if applicable
                     if (schedule.triggerType === 0 || schedule.triggerType === 2) {
@@ -1894,50 +2365,62 @@ window.editSchedule = function(scheduleId) {
                         // Set input logic
                         document.getElementById('schedule-input-logic').value = schedule.logic;
                         
-                        // Set digital input checkboxes
+                        console.log("Setting input checkboxes, inputMask:", schedule.inputMask);
+                        console.log("Input states:", schedule.inputStates);
+                        
+                        // Set digital input checkboxes (bits 0-15)
                         for (let i = 0; i < 16; i++) {
-                            if (schedule.inputMask & (1 << i)) {
+                            const bitMask = (1 << i);
+                            if (schedule.inputMask & bitMask) {
                                 const checkbox = document.querySelector(`#input-checkboxes input[data-input="${i}"]`);
                                 if (checkbox) {
                                     checkbox.checked = true;
                                     
-                                    // Set the state select to visible and set its value
+                                    // Get the container and find the state select
                                     const container = checkbox.closest('.input-container');
                                     if (container) {
                                         const stateSelect = container.querySelector('.input-state-select');
                                         if (stateSelect) {
+                                            // Show the state select
                                             stateSelect.style.display = 'inline-block';
-                                            stateSelect.value = (schedule.inputStates & (1 << i)) !== 0 ? '1' : '0';
+                                            
+                                            // Set its value based on the bit in inputStates
+                                            stateSelect.value = (schedule.inputStates & bitMask) ? '1' : '0';
+                                            
+                                            console.log(`Input ${i+1} state set to ${stateSelect.value}`);
                                         }
                                     }
                                 }
                             }
                         }
                         
-                        // Set HT input checkboxes
+                        // Set HT input checkboxes (bits 16-18)
                         for (let i = 0; i < 3; i++) {
                             const bitPos = i + 16;
-                            if (schedule.inputMask & (1 << bitPos)) {
+                            const bitMask = (1 << bitPos);
+                            if (schedule.inputMask & bitMask) {
                                 const checkbox = document.querySelector(`#ht-input-checkboxes input[data-input="${bitPos}"]`);
                                 if (checkbox) {
                                     checkbox.checked = true;
                                     
-                                    // Set the state select to visible and set its value
+                                    // Get the container and find the state select
                                     const container = checkbox.closest('.input-container');
                                     if (container) {
                                         const stateSelect = container.querySelector('.input-state-select');
                                         if (stateSelect) {
+                                            // Show the state select
                                             stateSelect.style.display = 'inline-block';
-                                            stateSelect.value = (schedule.inputStates & (1 << bitPos)) !== 0 ? '1' : '0';
+                                            
+                                            // Set its value based on the bit in inputStates
+                                            stateSelect.value = (schedule.inputStates & bitMask) ? '1' : '0';
+                                            
+                                            console.log(`HT${i+1} state set to ${stateSelect.value}`);
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                    
-                    // Show/hide sections based on trigger type
-                    updateVisibleTriggerSections(schedule.triggerType);
                     
                     // Set target
                     if (schedule.targetType === 0) {
@@ -1966,6 +2449,8 @@ window.editSchedule = function(scheduleId) {
             showToast('Failed to load schedule data', 'error');
         });
 };
+
+
 
 window.deleteSchedule = function(scheduleId) {
     if (confirm('Are you sure you want to delete this schedule?')) {
@@ -2836,16 +3321,17 @@ function updateAnalogChart() {
     updateAnalogVisualizations(systemData.analog);
 }
 
-// Update analog visualizations
+// Update analog visualizations with improved smoothness
 function updateAnalogVisualizations(analogData) {
     if (!analogData) return;
     
     analogData.forEach((input, index) => {
         const percentage = input.percentage || 0;
         
-        // Update bar
+        // Update bar with smooth animation
         const bar = document.getElementById(`analog-bar-${index}`);
         if (bar) {
+            bar.style.transition = 'height 0.2s ease-out';
             bar.style.height = `${percentage}%`;
         }
         
@@ -2962,7 +3448,7 @@ function updateDirectInputState(id, state) {
     }
 }
 
-// Update analog value
+// Update analog value with improved visual feedback
 function updateAnalogValue(id, value) {
     // Get voltage and percentage from system data
     const voltage = systemData.analog && systemData.analog[id] ? 
@@ -2970,10 +3456,11 @@ function updateAnalogValue(id, value) {
     const percentage = systemData.analog && systemData.analog[id] ? 
                       systemData.analog[id].percentage : 0;
     
-    // Update fill bar
+    // Update fill bar with smooth animation
     const fillBar = document.querySelector(`.analog-card[data-input="${id}"] .analog-fill`);
     if (fillBar) {
         fillBar.style.width = `${percentage}%`;
+        fillBar.style.transition = 'width 0.2s ease-out'; // Smoother transition
     }
     
     // Update value display - show both raw value and voltage
@@ -2988,10 +3475,11 @@ function updateAnalogValue(id, value) {
         percentageDisplay.textContent = `${percentage}%`;
     }
     
-    // Update visual bar
+    // Update visual bar with smooth animation
     const bar = document.getElementById(`analog-bar-${id}`);
     if (bar) {
         bar.style.height = `${percentage}%`;
+        bar.style.transition = 'height 0.2s ease-out'; // Smoother transition
     }
     
     // Update visual value
@@ -3140,7 +3628,7 @@ function refreshSystemStatus() {
                 const directInputsGrid = document.getElementById('direct-inputs-grid');
                 if (directInputsGrid && directInputsGrid.children.length === 0) {
                     for (let i = 0; i < 3; i++) {
-                        const inputItem = document.createElement('div');
+                                                const inputItem = document.createElement('div');
                         inputItem.className = 'input-item';
                         inputItem.setAttribute('data-input', 'ht' + i);
                         inputItem.innerHTML = `
@@ -3708,69 +4196,68 @@ function showToast(message, type = 'info') {
         toast.className = 'toast';
     }, 3000);
 }
-
-// Add to your navigation click handler or initialization function
-// Initialize interrupts UI
-function initInterruptsUI() {
-    // Load interrupts configurations
-    fetchInterrupts();
+// Initialize Input Interrupts UI
+function initInputInterruptsUI() {
+    console.log("Initializing Input Interrupts UI");
     
-    // Setup modal close buttons if they exist
-    const interruptModal = document.getElementById('interrupt-modal');
-    if (interruptModal) {
-        document.querySelectorAll('#interrupt-modal .close-modal, #interrupt-modal .close-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                interruptModal.style.display = 'none';
-            });
+    // Load interrupt configurations from server
+    fetchInterruptConfigs();
+    
+    // Setup batch configure button
+    const configureAllBtn = document.getElementById('configure-all-interrupts');
+    if (configureAllBtn) {
+        configureAllBtn.addEventListener('click', function() {
+            openInterruptModal();
         });
     }
     
-    // Setup form submission if it exists
+    // Setup enable all button
+    const enableAllBtn = document.getElementById('enable-all-interrupts');
+    if (enableAllBtn) {
+        enableAllBtn.addEventListener('click', function() {
+            enableAllInterrupts();
+        });
+    }
+    
+    // Setup disable all button
+    const disableAllBtn = document.getElementById('disable-all-interrupts');
+    if (disableAllBtn) {
+        disableAllBtn.addEventListener('click', function() {
+            disableAllInterrupts();
+        });
+    }
+    
+    // Setup modal close buttons
+    document.querySelectorAll('#interrupt-modal .close-modal, #interrupt-modal .close-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.getElementById('interrupt-modal').style.display = 'none';
+        });
+    });
+    
+    // Setup form submission
     const interruptForm = document.getElementById('interrupt-form');
     if (interruptForm) {
         interruptForm.addEventListener('submit', function(e) {
             e.preventDefault();
-            saveInterrupt();
-        });
-    }
-    
-    // Setup "Configure All" button
-    const configureAllBtn = document.getElementById('configure-all-interrupts');
-    if (configureAllBtn) {
-        configureAllBtn.addEventListener('click', configureAllInterrupts);
-    }
-    
-    // Setup enable/disable all buttons
-    const enableAllBtn = document.getElementById('enable-all-interrupts');
-    if (enableAllBtn) {
-        enableAllBtn.addEventListener('click', function() {
-            enableAllInterrupts(true);
-        });
-    }
-    
-    const disableAllBtn = document.getElementById('disable-all-interrupts');
-    if (disableAllBtn) {
-        disableAllBtn.addEventListener('click', function() {
-            enableAllInterrupts(false);
+            saveInterruptConfig();
         });
     }
 }
 
-// Fetch interrupts configurations
-function fetchInterrupts() {
+// Fetch interrupt configurations from the server
+function fetchInterruptConfigs() {
     fetch('/api/interrupts')
         .then(response => response.json())
         .then(data => {
             renderInterruptsTable(data.interrupts);
         })
         .catch(error => {
-            console.error('Error fetching interrupts:', error);
+            console.error('Error fetching interrupt configurations:', error);
             showToast('Failed to load interrupt configurations', 'error');
         });
 }
 
 // Render interrupts table
-// Modify the renderInterruptsTable function to include trigger types
 function renderInterruptsTable(interrupts) {
     const tableBody = document.querySelector('#interrupts-table tbody');
     if (!tableBody) return;
@@ -3788,34 +4275,66 @@ function renderInterruptsTable(interrupts) {
         const row = document.createElement('tr');
         
         // Format priority
-        const priorities = ['None', 'High', 'Medium', 'Low'];
-        let priorityClass = '';
+        let priorityBadge = '';
+        let priorityText = '';
+        
         switch(interrupt.priority) {
-            case 1: priorityClass = 'high-priority'; break;
-            case 2: priorityClass = 'medium-priority'; break;
-            case 3: priorityClass = 'low-priority'; break;
-            default: priorityClass = 'no-priority';
+            case 1:
+                priorityBadge = '<span class="priority-badge high-priority">High</span>';
+                priorityText = 'High';
+                break;
+            case 2:
+                priorityBadge = '<span class="priority-badge medium-priority">Medium</span>';
+                priorityText = 'Medium';
+                break;
+            case 3:
+                priorityBadge = '<span class="priority-badge low-priority">Low</span>';
+                priorityText = 'Low';
+                break;
+            default:
+                priorityBadge = '<span class="priority-badge no-priority">None</span>';
+                priorityText = 'None (Polling)';
         }
         
         // Format trigger type
-        const triggerTypes = ['Rising Edge', 'Falling Edge', 'Change', 'High Level', 'Low Level'];
-        let triggerClass = '';
+        let triggerText = '';
+        let triggerBadge = '';
+        
         switch(interrupt.triggerType) {
-            case 0: triggerClass = 'trigger-rising'; break;
-            case 1: triggerClass = 'trigger-falling'; break;
-            case 2: triggerClass = 'trigger-change'; break;
-            case 3: triggerClass = 'trigger-high'; break;
-            case 4: triggerClass = 'trigger-low'; break;
+            case 0:
+                triggerText = 'Rising Edge';
+                triggerBadge = '<span class="trigger-badge trigger-rising">Rising</span>';
+                break;
+            case 1:
+                triggerText = 'Falling Edge';
+                triggerBadge = '<span class="trigger-badge trigger-falling">Falling</span>';
+                break;
+            case 2:
+                triggerText = 'Change (Both Edges)';
+                triggerBadge = '<span class="trigger-badge trigger-change">Change</span>';
+                break;
+            case 3:
+                triggerText = 'High Level';
+                triggerBadge = '<span class="trigger-badge trigger-high">High Level</span>';
+                break;
+            case 4:
+                triggerText = 'Low Level';
+                triggerBadge = '<span class="trigger-badge trigger-low">Low Level</span>';
+                break;
         }
+        
+        // Format input name
+        let inputName = `Input ${interrupt.inputIndex + 1}`;
         
         row.innerHTML = `
             <td><input type="checkbox" ${interrupt.enabled ? 'checked' : ''} onchange="toggleInterrupt(${interrupt.id}, this.checked)"></td>
             <td>${interrupt.name}</td>
-            <td><span class="priority-badge ${priorityClass}">${priorities[interrupt.priority]}</span></td>
-            <td><span class="trigger-badge ${triggerClass}">${triggerTypes[interrupt.triggerType || 2]}</span></td>
-            <td>Input ${interrupt.inputIndex + 1}</td>
+            <td>${priorityBadge}</td>
+            <td>${inputName} ${triggerBadge}</td>
             <td>
-                <button class="btn btn-secondary btn-sm" onclick="editInterrupt(${interrupt.id})"><i class="fa fa-edit"></i> Configure</button>
+                <div class="action-btns">
+                    <button class="btn btn-secondary btn-sm" onclick="editInterrupt(${interrupt.id})"><i class="fa fa-edit"></i></button>
+                </div>
             </td>
         `;
         
@@ -3823,9 +4342,7 @@ function renderInterruptsTable(interrupts) {
     });
 }
 
-
 // Open interrupt configuration modal
-// Update the openInterruptModal function to include trigger type
 function openInterruptModal(interruptId = null) {
     const modal = document.getElementById('interrupt-modal');
     if (!modal) return;
@@ -3836,31 +4353,37 @@ function openInterruptModal(interruptId = null) {
     document.getElementById('interrupt-form').reset();
     document.getElementById('interrupt-id').value = '';
     
+    // If editing an existing interrupt
     if (interruptId !== null) {
-        // Load interrupt data
+        document.getElementById('interrupt-id').value = interruptId;
+        
+        // Fetch the interrupt data
         fetch(`/api/interrupts?id=${interruptId}`)
             .then(response => response.json())
             .then(data => {
-                const interrupt = data.interrupt;
-                
-                document.getElementById('interrupt-id').value = interrupt.id;
-                document.getElementById('interrupt-enabled').checked = interrupt.enabled;
-                document.getElementById('interrupt-name').value = interrupt.name;
-                document.getElementById('interrupt-priority').value = interrupt.priority;
-                document.getElementById('interrupt-input').value = interrupt.inputIndex;
-                document.getElementById('interrupt-trigger-type').value = interrupt.triggerType || 2; // Default to CHANGE if not set
+                const interrupts = data.interrupts;
+                if (interrupts && interrupts.length > 0) {
+                    // Find the interrupt with matching ID
+                    const interrupt = interrupts.find(i => i.id === parseInt(interruptId));
+                    if (interrupt) {
+                        // Set form values from interrupt data
+                        document.getElementById('interrupt-enabled').checked = interrupt.enabled;
+                        document.getElementById('interrupt-name').value = interrupt.name;
+                        document.getElementById('interrupt-input').value = interrupt.inputIndex;
+                        document.getElementById('interrupt-priority').value = interrupt.priority;
+                        document.getElementById('interrupt-trigger-type').value = interrupt.triggerType;
+                    }
+                }
             })
             .catch(error => {
                 console.error('Error loading interrupt configuration:', error);
-                showToast('Failed to load interrupt configuration details', 'error');
+                showToast('Failed to load interrupt configuration', 'error');
             });
     }
 }
 
-
 // Save interrupt configuration
-// Update the saveInterrupt function to include trigger type
-function saveInterrupt() {
+function saveInterruptConfig() {
     const interruptId = document.getElementById('interrupt-id').value;
     const isNew = !interruptId;
     
@@ -3868,11 +4391,16 @@ function saveInterrupt() {
     const interrupt = {
         id: interruptId ? parseInt(interruptId) : null,
         enabled: document.getElementById('interrupt-enabled').checked,
-        name: document.getElementById('interrupt-name').value,
-        priority: parseInt(document.getElementById('interrupt-priority').value),
+        name: document.getElementById('interrupt-name').value || `Input ${document.getElementById('interrupt-input').value + 1} Interrupt`,
         inputIndex: parseInt(document.getElementById('interrupt-input').value),
+        priority: parseInt(document.getElementById('interrupt-priority').value),
         triggerType: parseInt(document.getElementById('interrupt-trigger-type').value)
     };
+    
+    console.log("Saving interrupt configuration:", interrupt);
+    
+    // Show saving message
+    showToast('Saving interrupt configuration...', 'info');
     
     // Save to server
     fetch('/api/interrupts', {
@@ -3882,12 +4410,21 @@ function saveInterrupt() {
         },
         body: JSON.stringify({ interrupt: interrupt })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.status === 'success') {
+            // Hide the modal
             document.getElementById('interrupt-modal').style.display = 'none';
-            showToast(`Interrupt configuration ${isNew ? 'created' : 'updated'} successfully`);
-            fetchInterrupts();
+            
+            showToast(`Interrupt configuration ${isNew ? 'created' : 'updated'} successfully`, 'success');
+            
+            // Refresh the interrupts table
+            fetchInterruptConfigs();
         } else {
             showToast(`Failed to ${isNew ? 'create' : 'update'} interrupt configuration: ${data.message}`, 'error');
         }
@@ -3898,15 +4435,71 @@ function saveInterrupt() {
     });
 }
 
-// Toggle interrupt enabled state
-function toggleInterrupt(id, enabled) {
+// Enable all interrupts
+function enableAllInterrupts() {
     fetch('/api/interrupts', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-            id: id,
+            action: "enable_all"
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast('All interrupts enabled');
+            fetchInterruptConfigs();
+        } else {
+            showToast(`Failed to enable all interrupts: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error enabling all interrupts:', error);
+        showToast('Network error. Could not enable all interrupts', 'error');
+    });
+}
+
+// Disable all interrupts
+function disableAllInterrupts() {
+    fetch('/api/interrupts', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+            action: "disable_all"
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast('All interrupts disabled');
+            fetchInterruptConfigs();
+        } else {
+            showToast(`Failed to disable all interrupts: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error disabling all interrupts:', error);
+        showToast('Network error. Could not disable all interrupts', 'error');
+    });
+}
+
+// Global functions for interrupt management
+window.editInterrupt = function(interruptId) {
+    openInterruptModal(interruptId);
+};
+
+window.toggleInterrupt = function(interruptId, enabled) {
+    fetch('/api/interrupts', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+            id: interruptId,
             enabled: enabled
         })
     })
@@ -3916,100 +4509,13 @@ function toggleInterrupt(id, enabled) {
             showToast(`Interrupt ${enabled ? 'enabled' : 'disabled'}`);
         } else {
             showToast(`Failed to update interrupt: ${data.message}`, 'error');
-            fetchInterrupts(); // Refresh to get actual state
+            fetchInterruptConfigs(); // Refresh to get actual state
         }
     })
     .catch(error => {
         console.error('Error toggling interrupt:', error);
         showToast('Network error. Could not update interrupt', 'error');
-        fetchInterrupts(); // Refresh to get actual state
+        fetchInterruptConfigs(); // Refresh to get actual state
     });
-}
+};
 
-// Configure interrupt
-function editInterrupt(id) {
-    openInterruptModal(id);
-}
-
-// Configure all interrupts at once
-function configureAllInterrupts() {
-    // You can implement a batch configuration UI here
-    showToast('Batch configuration feature coming soon', 'info');
-}
-
-// Enable or disable all interrupts
-function enableAllInterrupts(enable) {
-    fetch('/api/interrupts', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-            action: enable ? 'enable_all' : 'disable_all'
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            showToast(data.message || `All interrupts ${enable ? 'enabled' : 'disabled'}`);
-            fetchInterrupts(); // Refresh the table
-        } else {
-            showToast(`Failed to ${enable ? 'enable' : 'disable'} interrupts: ${data.message}`, 'error');
-        }
-    })
-    .catch(error => {
-        console.error(`Error ${enable ? 'enabling' : 'disabling'} all interrupts:`, error);
-        showToast('Network error. Operation failed', 'error');
-    });
-}
-
-// Add to your initialization function to call initInterruptsUI
-document.addEventListener('DOMContentLoaded', function() {
-    // Existing init code...
-    initInterruptsUI();
-});
-
-// Add this function to automatically sync time
-function autoSyncTimeFromBrowser() {
-    const now = new Date();
-    
-    const timeData = {
-        year: now.getFullYear(),
-        month: now.getMonth() + 1,
-        day: now.getDate(),
-        hour: now.getHours(),
-        minute: now.getMinutes(),
-        second: now.getSeconds()
-    };
-    
-    // Send time to the device
-    fetch('/api/time', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(timeData)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            console.log('Device time automatically synced with browser time');
-        } else {
-            console.error('Failed to auto-sync time:', data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Error auto-syncing time:', error);
-    });
-}
-
-// Call this function when the app initializes
-document.addEventListener('DOMContentLoaded', function() {
-    // Existing init code...
-    
-    // Auto sync time when the app loads
-    setTimeout(autoSyncTimeFromBrowser, 3000); // Small delay to ensure connectivity
-    
-    // Set up periodic time sync (every 30 minutes)
-    setInterval(autoSyncTimeFromBrowser, 30 * 60 * 1000);
-});
