@@ -1309,4 +1309,106 @@ nav ul li a[data-section="input-interrupts"] {
     margin: 2px 0;
     background-color: #ffebee;
     border-left: 3px solid #F44336;
+
+}
+
+/* Add to style.css */
+/* HT Sensors Styles */
+.sensors-container {
+    margin-top: 20px;
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+}
+
+.sensors-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.sensor-card {
+    background-color: #f5f5f5;
+    border-radius: 5px;
+    padding: 15px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.sensor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.sensor-header h4 {
+    margin: 0;
+    color: #1a2b42;
+}
+
+.sensor-type {
+    font-size: 0.8em;
+    padding: 2px 5px;
+    background-color: #e0e0e0;
+    border-radius: 3px;
+    color: #333;
+}
+
+.sensor-value {
+    font-size: 1.5em;
+    text-align: center;
+    padding: 10px;
+    font-weight: bold;
+    background-color: #e0e0e0;
+    border-radius: 5px;
+}
+
+.sensor-value.active {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.sensor-values {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.sensor-temp, .sensor-humidity {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 5px;
+    background-color: #e0e0e0;
+    border-radius: 5px;
+}
+
+.sensor-temp {
+    background-color: #ffebee;
+    color: #d32f2f;
+}
+
+.sensor-humidity {
+    background-color: #e3f2fd;
+    color: #1976d2;
+}
+
+.sensor-temp i, .sensor-humidity i {
+    font-size: 1.5em;
+    margin-bottom: 5px;
+}
+
+.sensor-temp span, .sensor-humidity span {
+    font-weight: bold;
+}
+
+.sensor-config-info {
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border: 1px solid #ddd;
+    font-size: 0.9em;
 }

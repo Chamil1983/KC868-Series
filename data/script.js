@@ -105,6 +105,106 @@ document.addEventListener('DOMContentLoaded', function() {
             from { opacity: 1; }
             to { opacity: 0; }
         }
+        
+        /* HT Sensors Styles */
+        .sensors-container {
+            margin-top: 20px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+        }
+
+        .sensors-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .sensor-card {
+            background-color: #f5f5f5;
+            border-radius: 5px;
+            padding: 15px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .sensor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .sensor-header h4 {
+            margin: 0;
+            color: #1a2b42;
+        }
+
+        .sensor-type {
+            font-size: 0.8em;
+            padding: 2px 5px;
+            background-color: #e0e0e0;
+            border-radius: 3px;
+            color: #333;
+        }
+
+        .sensor-value {
+            font-size: 1.5em;
+            text-align: center;
+            padding: 10px;
+            font-weight: bold;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+        }
+
+        .sensor-value.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .sensor-values {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .sensor-temp, .sensor-humidity {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px 5px;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+        }
+
+        .sensor-temp {
+            background-color: #ffebee;
+            color: #d32f2f;
+        }
+
+        .sensor-humidity {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .sensor-temp i, .sensor-humidity i {
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+
+        .sensor-temp span, .sensor-humidity span {
+            font-weight: bold;
+        }
+
+        .sensor-config-info {
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 15px 0;
+            border: 1px solid #ddd;
+            font-size: 0.9em;
+        }
     `;
     document.head.appendChild(style);
     
@@ -175,6 +275,7 @@ function initApp() {
     initScheduleUI();
     initTriggerUI();
     initInputInterruptsUI(); // Add this line to initialize Input Interrupts UI
+    initHTSensorsUI();  // Add this line to initialize HT sensors UI
     initSettingsUI();
     initDiagnosticsUI();
     initCommunicationUI();
@@ -982,6 +1083,11 @@ function handleStatusUpdate(data) {
         });
     }
     
+    // Update HT sensors
+    if (data.htSensors) {
+        renderHTSensors(data.htSensors);
+    }
+    
     // Update analog inputs with improved handling
     if (data.analog) {
         // Store data in systemData before processing it
@@ -1420,6 +1526,11 @@ function initScheduleUI() {
         }
     }
     
+    // Create sensor trigger section if it doesn't exist
+    if (!document.getElementById('sensor-trigger-section')) {
+        createSensorTriggerSection();
+    }
+    
     // Initialize modal scroll fix
     setupModalScrollFix();
 }
@@ -1509,6 +1620,23 @@ function renderSchedulesTable(schedules) {
                 
                 triggerText = `${timePart} AND ${inputPart}`;
                 break;
+                
+            case 3: // Sensor-based
+                triggerTypeText = 'Sensor';
+                
+                // Format sensor trigger
+                const sensorNames = ['HT1', 'HT2', 'HT3'];
+                const measurementTypes = ['Temperature', 'Humidity'];
+                const conditions = ['>', '<', '='];
+                
+                let sensorName = sensorNames[schedule.sensorIndex] || 'Unknown';
+                let measurementType = measurementTypes[schedule.sensorTriggerType] || 'Value';
+                let condition = conditions[schedule.sensorCondition] || '?';
+                let threshold = schedule.sensorThreshold;
+                let unit = schedule.sensorTriggerType === 0 ? '°C' : '%';
+                
+                triggerText = `${sensorName} ${measurementType} ${condition} ${threshold}${unit}`;
+                break;
         }
         
         // Format action
@@ -1553,7 +1681,7 @@ function renderSchedulesTable(schedules) {
             
             targetText = `${highTargetText}<br>${lowTargetText}`;
         } else {
-            // For time-based or single target, use original format
+            // For time-based or single target, use the original format
             if (schedule.targetType === 0) {
                 targetText = `Relay ${schedule.targetId + 1}`;
             } else {
@@ -1627,8 +1755,6 @@ function evaluateInputBasedSchedules() {
         });
 }
 
-
-
 // Helper function to format input trigger text with improved display
 function formatInputTriggerText(inputMask, inputStates, logic) {
     if (!inputMask) return 'No inputs selected';
@@ -1667,24 +1793,29 @@ function formatInputTriggerText(inputMask, inputStates, logic) {
 function updateVisibleTriggerSections(triggerType) {
     const timeSection = document.getElementById('time-trigger-section');
     const inputSection = document.getElementById('input-trigger-section');
+    const sensorSection = document.getElementById('sensor-trigger-section');
     const inputConditions = document.getElementById('input-condition-sections');
     const singleTarget = document.getElementById('single-target');
     const multipleTargets = document.getElementById('multiple-targets');
     const targetType = document.getElementById('schedule-target-type').value;
     
-    if (!timeSection || !inputSection) {
-        console.error('Time or input trigger sections not found!');
+    if (!timeSection || !inputSection || !sensorSection) {
+        console.error('Time, input, or sensor trigger sections not found!');
         return;
     }
     
     triggerType = parseInt(triggerType);
     console.log(`Updating visible sections for trigger type: ${triggerType}`);
     
+    // Hide all sections first
+    timeSection.style.display = 'none';
+    inputSection.style.display = 'none';
+    sensorSection.style.display = 'none';
+    if (inputConditions) inputConditions.style.display = 'none';
+    
     switch (triggerType) {
         case 0: // Time-based
             timeSection.style.display = 'block';
-            inputSection.style.display = 'none';
-            if (inputConditions) inputConditions.style.display = 'none';
             
             // Show appropriate target section based on target type
             if (targetType === '0') {
@@ -1697,7 +1828,6 @@ function updateVisibleTriggerSections(triggerType) {
             break;
             
         case 1: // Input-based
-            timeSection.style.display = 'none';
             inputSection.style.display = 'block';
             
             // Show appropriate target section based on target type
@@ -1728,14 +1858,103 @@ function updateVisibleTriggerSections(triggerType) {
             }
             break;
             
+        case 3: // Sensor-based
+            sensorSection.style.display = 'block';
+            
+            // Show appropriate target section based on target type
+            if (targetType === '0') {
+                if (singleTarget) singleTarget.style.display = 'block';
+                if (multipleTargets) multipleTargets.style.display = 'none';
+                if (inputConditions) inputConditions.style.display = 'none';
+            } else {
+                if (singleTarget) singleTarget.style.display = 'none';
+                if (multipleTargets) multipleTargets.style.display = 'none';
+                if (inputConditions) inputConditions.style.display = 'block';
+            }
+            break;
+            
         default:
             console.error(`Unknown trigger type: ${triggerType}`);
             timeSection.style.display = 'block';
-            inputSection.style.display = 'none';
-            if (inputConditions) inputConditions.style.display = 'none';
     }
 }
 
+// Function to create the sensor trigger section
+function createSensorTriggerSection() {
+    const form = document.getElementById('schedule-form');
+    if (!form) return;
+    
+    // Find the input trigger section to insert after
+    const inputSection = document.getElementById('input-trigger-section');
+    if (!inputSection) return;
+    
+    // Create the sensor trigger section
+    const sensorSection = document.createElement('div');
+    sensorSection.id = 'sensor-trigger-section';
+    sensorSection.style.display = 'none';
+    sensorSection.innerHTML = `
+        <div class="form-group">
+            <label for="schedule-sensor">Select Sensor</label>
+            <select id="schedule-sensor" required>
+                <option value="0">HT1</option>
+                <option value="1">HT2</option>
+                <option value="2">HT3</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="schedule-sensor-type">Measurement Type</label>
+            <select id="schedule-sensor-type" required>
+                <option value="0">Temperature (°C)</option>
+                <option value="1">Humidity (%)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="schedule-sensor-condition">Condition</label>
+            <select id="schedule-sensor-condition" required>
+                <option value="0">Above</option>
+                <option value="1">Below</option>
+                <option value="2">Equal to (±0.5)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="schedule-sensor-threshold" id="sensor-threshold-label">Threshold (°C)</label>
+            <input type="number" id="schedule-sensor-threshold" step="0.1" min="-40" max="125" value="25.0" required>
+        </div>
+        <div class="sensor-triggers-info">
+            <p><strong>Sensor Trigger Settings:</strong></p>
+            <ul>
+                <li>HT pins must be configured as sensors (DHT11, DHT22, or DS18B20)</li>
+                <li>For humidity, only DHT11 and DHT22 sensors provide readings</li>
+                <li>Temperature range: -40°C to 125°C</li>
+                <li>Humidity range: 0% to 100%</li>
+            </ul>
+        </div>
+    `;
+    
+    // Add the section after the input trigger section
+    inputSection.parentNode.insertBefore(sensorSection, inputSection.nextSibling);
+    
+    // Add event handler for sensor type change to update the label and range
+    const sensorTypeSelect = document.getElementById('schedule-sensor-type');
+    const thresholdLabel = document.getElementById('sensor-threshold-label');
+    const thresholdInput = document.getElementById('schedule-sensor-threshold');
+    
+    if (sensorTypeSelect && thresholdLabel && thresholdInput) {
+        sensorTypeSelect.addEventListener('change', function() {
+            if (this.value === "0") {
+                thresholdLabel.textContent = "Threshold (°C)";
+                thresholdInput.min = "-40";
+                thresholdInput.max = "125";
+                thresholdInput.value = "25.0";
+            } else {
+                thresholdLabel.textContent = "Threshold (%)";
+                thresholdInput.min = "0";
+                thresholdInput.max = "100";
+                thresholdInput.value = "50.0";
+            }
+        });
+    }
+}
 
 // Modified openScheduleModal function to handle both HIGH and LOW relay targets
 function openScheduleModal(scheduleId = null) {
@@ -1816,13 +2035,20 @@ function openScheduleModal(scheduleId = null) {
         checkbox.checked = false;
     });
     
-    // Show time-based trigger by default and hide input-based
+    // Make sure we have a sensor-trigger-section
+    if (!document.getElementById('sensor-trigger-section')) {
+        createSensorTriggerSection();
+    }
+    
+    // Show time-based trigger by default and hide others
     const timeSection = document.getElementById('time-trigger-section');
     const inputSection = document.getElementById('input-trigger-section');
+    const sensorSection = document.getElementById('sensor-trigger-section');
     const inputConditions = document.getElementById('input-condition-sections');
     
     if (timeSection) timeSection.style.display = 'block';
     if (inputSection) inputSection.style.display = 'none';
+    if (sensorSection) sensorSection.style.display = 'none';
     if (inputConditions) inputConditions.style.display = 'none';
     
     // Show single target by default
@@ -1936,6 +2162,21 @@ function openScheduleModal(scheduleId = null) {
                             }
                         }
                         
+                        // Set sensor fields if applicable
+                        if (schedule.triggerType === 3) {
+                            document.getElementById('schedule-sensor').value = schedule.sensorIndex;
+                            document.getElementById('schedule-sensor-type').value = schedule.sensorTriggerType;
+                            document.getElementById('schedule-sensor-condition').value = schedule.sensorCondition;
+                            document.getElementById('schedule-sensor-threshold').value = schedule.sensorThreshold;
+                            
+                            // Update label based on sensor type
+                            const thresholdLabel = document.getElementById('sensor-threshold-label');
+                            if (thresholdLabel) {
+                                thresholdLabel.textContent = schedule.sensorTriggerType === 0 ? 
+                                    "Threshold (°C)" : "Threshold (%)";
+                            }
+                        }
+                        
                         // Set target based on trigger type and target type
                         if (schedule.triggerType === 0 || schedule.targetType === 0) {
                             // Time-based or single target
@@ -1959,8 +2200,8 @@ function openScheduleModal(scheduleId = null) {
                                     }
                                 }
                             }
-                        } else if ((schedule.triggerType === 1 || schedule.triggerType === 2) && schedule.targetType === 1) {
-                            // Input-based or combined with multiple targets
+                        } else if ((schedule.triggerType === 1 || schedule.triggerType === 2 || schedule.triggerType === 3) && schedule.targetType === 1) {
+                            // Input-based, combined, or sensor-based with multiple targets
                             if (singleTarget) singleTarget.style.display = 'none';
                             if (multipleTargets) multipleTargets.style.display = 'none';
                             if (inputConditions) inputConditions.style.display = 'block';
@@ -2036,13 +2277,17 @@ function saveSchedule() {
     // Get trigger type
     const triggerType = parseInt(document.getElementById('schedule-trigger-type').value);
     
-    // Initialize time and input fields
+    // Initialize time, input and sensor fields
     let days = 0;
     let hour = 0;
     let minute = 0;
     let inputMask = 0;
     let inputStates = 0;
     let logic = 0;
+    let sensorIndex = 0;
+    let sensorTriggerType = 0;
+    let sensorCondition = 0;
+    let sensorThreshold = 25.0;
     
     // Process time-based fields if applicable
     if (triggerType === 0 || triggerType === 2) {
@@ -2104,13 +2349,21 @@ function saveSchedule() {
         });
     }
     
+    // Process sensor-based fields if applicable
+    if (triggerType === 3) {
+        sensorIndex = parseInt(document.getElementById('schedule-sensor').value);
+        sensorTriggerType = parseInt(document.getElementById('schedule-sensor-type').value);
+        sensorCondition = parseInt(document.getElementById('schedule-sensor-condition').value);
+        sensorThreshold = parseFloat(document.getElementById('schedule-sensor-threshold').value);
+    }
+    
     // Get target for HIGH state
     const targetType = parseInt(document.getElementById('schedule-target-type').value);
     let targetId = 0;
     let targetIdLow = 0;
     
     // Handle the case for input-based or combined trigger types
-    if (triggerType === 1 || triggerType === 2) {
+    if (triggerType === 1 || triggerType === 2 || triggerType === 3) {
         if (targetType === 0) {
             // Single relay - not used for dual condition mode
             targetId = parseInt(document.getElementById('schedule-target-id').value);
@@ -2154,7 +2407,13 @@ function saveSchedule() {
         action: parseInt(document.getElementById('schedule-action').value),
         targetType: targetType,
         targetId: targetId,
-        targetIdLow: targetIdLow
+        targetIdLow: targetIdLow,
+        
+        // Add sensor-specific fields
+        sensorIndex: sensorIndex,
+        sensorTriggerType: sensorTriggerType,
+        sensorCondition: sensorCondition,
+        sensorThreshold: sensorThreshold
     };
     
     console.log("Saving schedule:", schedule);
@@ -2172,7 +2431,7 @@ function saveSchedule() {
     }
     
     // For input-based or combined, ensure at least one relay is selected for HIGH or LOW
-    if ((triggerType === 1 || triggerType === 2) && targetType === 1 && (targetId === 0 && targetIdLow === 0)) {
+    if ((triggerType === 1 || triggerType === 2 || triggerType === 3) && targetType === 1 && (targetId === 0 && targetIdLow === 0)) {
         showToast('Please select at least one relay for either HIGH or LOW condition', 'warning');
         return;
     }
@@ -2222,8 +2481,6 @@ function saveSchedule() {
         showToast(`Network error. Could not ${isNew ? 'create' : 'update'} schedule`, 'error');
     });
 }
-
-
 
 // Add this function to automatically sync time from browser to device
 function autoSyncTimeFromBrowser() {
@@ -2422,22 +2679,61 @@ window.editSchedule = function(scheduleId) {
                         }
                     }
                     
-                    // Set target
+                    // Set sensor fields if applicable
+                    if (schedule.triggerType === 3) {
+                        document.getElementById('schedule-sensor').value = schedule.sensorIndex;
+                        document.getElementById('schedule-sensor-type').value = schedule.sensorTriggerType;
+                        document.getElementById('schedule-sensor-condition').value = schedule.sensorCondition;
+                        document.getElementById('schedule-sensor-threshold').value = schedule.sensorThreshold;
+                        
+                        // Update label based on sensor type
+                        const thresholdLabel = document.getElementById('sensor-threshold-label');
+                        if (thresholdLabel) {
+                            thresholdLabel.textContent = schedule.sensorTriggerType === 0 ? 
+                                "Threshold (°C)" : "Threshold (%)";
+                        }
+                    }
+                    
+                    // Set target based on trigger type
                     if (schedule.targetType === 0) {
-                        // Single relay
+                        // Single target
                         document.getElementById('single-target').style.display = 'block';
                         document.getElementById('multiple-targets').style.display = 'none';
                         document.getElementById('schedule-target-id').value = schedule.targetId;
                     } else {
-                        // Multiple relays
-                        document.getElementById('single-target').style.display = 'none';
-                        document.getElementById('multiple-targets').style.display = 'block';
-                        
-                        // Set relay checkboxes
-                        for (let i = 0; i < 16; i++) {
-                            const checkbox = document.querySelector(`#relay-checkboxes input[data-relay="${i}"]`);
-                            if (checkbox) {
-                                checkbox.checked = (schedule.targetId & (1 << i)) !== 0;
+                        // Multiple targets
+                        if (schedule.triggerType === 0) {
+                            // Time-based
+                            document.getElementById('single-target').style.display = 'none';
+                            document.getElementById('multiple-targets').style.display = 'block';
+                            
+                            // Set relay checkboxes
+                            for (let i = 0; i < 16; i++) {
+                                const checkbox = document.querySelector(`#relay-checkboxes input[data-relay="${i}"]`);
+                                if (checkbox) {
+                                    checkbox.checked = (schedule.targetId & (1 << i)) !== 0;
+                                }
+                            }
+                        } else {
+                            // Input-based, Combined, or Sensor-based
+                            document.getElementById('single-target').style.display = 'none';
+                            document.getElementById('multiple-targets').style.display = 'none';
+                            document.getElementById('input-condition-sections').style.display = 'block';
+                            
+                            // Set HIGH condition checkboxes
+                            for (let i = 0; i < 16; i++) {
+                                const checkbox = document.querySelector(`#relay-checkboxes-high input[data-relay="${i}"]`);
+                                if (checkbox) {
+                                    checkbox.checked = (schedule.targetId & (1 << i)) !== 0;
+                                }
+                            }
+                            
+                            // Set LOW condition checkboxes
+                            for (let i = 0; i < 16; i++) {
+                                const checkbox = document.querySelector(`#relay-checkboxes-low input[data-relay="${i}"]`);
+                                if (checkbox) {
+                                    checkbox.checked = (schedule.targetIdLow & (1 << i)) !== 0;
+                                }
                             }
                         }
                     }
@@ -2449,8 +2745,6 @@ window.editSchedule = function(scheduleId) {
             showToast('Failed to load schedule data', 'error');
         });
 };
-
-
 
 window.deleteSchedule = function(scheduleId) {
     if (confirm('Are you sure you want to delete this schedule?')) {
@@ -2588,6 +2882,36 @@ function initTriggerUI() {
             thresholdValue.textContent = this.value;
         });
     }
+    
+    // Add HT sensors to the trigger inputs
+    const triggerInputSelect = document.getElementById('trigger-input');
+    if (triggerInputSelect) {
+        // Check if we already have HT sensor options
+        let hasHTOptions = false;
+        for (let i = 0; i < triggerInputSelect.options.length; i++) {
+            if (triggerInputSelect.options[i].value.startsWith('ht')) {
+                hasHTOptions = true;
+                break;
+            }
+        }
+        
+        // Add HT sensor options if not already present
+        if (!hasHTOptions) {
+            const htOptgroup = document.createElement('optgroup');
+            htOptgroup.label = "Temperature & Humidity Sensors";
+            
+            htOptgroup.innerHTML = `
+                <option value="ht0_temp">HT1 Temperature</option>
+                <option value="ht0_hum">HT1 Humidity</option>
+                <option value="ht1_temp">HT2 Temperature</option>
+                <option value="ht1_hum">HT2 Humidity</option>
+                <option value="ht2_temp">HT3 Temperature</option>
+                <option value="ht2_hum">HT3 Humidity</option>
+            `;
+            
+            triggerInputSelect.appendChild(htOptgroup);
+        }
+    }
 }
 
 // Initialize input controls
@@ -2662,7 +2986,18 @@ function renderTriggersTable(triggers) {
         const row = document.createElement('tr');
         
         // Format input
-        const inputs = ['A1', 'A2', 'A3', 'A4'];
+        let inputName;
+        if (typeof trigger.analogInput === 'string' && trigger.analogInput.startsWith('ht')) {
+            // Parse the HT sensor trigger
+            const parts = trigger.analogInput.split('_');
+            const htIndex = parseInt(parts[0].replace('ht', ''));
+            const type = parts[1];
+            inputName = `HT${htIndex + 1} ${type === 'temp' ? 'Temperature' : 'Humidity'}`;
+        } else {
+            // Standard analog input
+            const inputs = ['A1', 'A2', 'A3', 'A4'];
+            inputName = inputs[trigger.analogInput] || 'Unknown';
+        }
         
         // Format condition
         const conditions = ['Above', 'Below', 'Equal to'];
@@ -2681,7 +3016,7 @@ function renderTriggersTable(triggers) {
         row.innerHTML = `
             <td><input type="checkbox" ${trigger.enabled ? 'checked' : ''} onchange="toggleTrigger(${trigger.id}, this.checked)"></td>
             <td>${trigger.name}</td>
-            <td>${inputs[trigger.analogInput]}</td>
+            <td>${inputName}</td>
             <td>${conditions[trigger.condition]}</td>
             <td>${trigger.threshold}</td>
             <td>${actions[trigger.action]}</td>
@@ -2787,7 +3122,7 @@ function saveTrigger() {
         id: triggerId ? parseInt(triggerId) : null,
         enabled: document.getElementById('trigger-enabled').checked,
         name: document.getElementById('trigger-name').value,
-        analogInput: parseInt(document.getElementById('trigger-input').value),
+        analogInput: document.getElementById('trigger-input').value,
         condition: parseInt(document.getElementById('trigger-condition').value),
         threshold: parseInt(document.getElementById('trigger-threshold').value),
         action: parseInt(document.getElementById('trigger-action').value),
@@ -3628,7 +3963,7 @@ function refreshSystemStatus() {
                 const directInputsGrid = document.getElementById('direct-inputs-grid');
                 if (directInputsGrid && directInputsGrid.children.length === 0) {
                     for (let i = 0; i < 3; i++) {
-                                                const inputItem = document.createElement('div');
+                        const inputItem = document.createElement('div');
                         inputItem.className = 'input-item';
                         inputItem.setAttribute('data-input', 'ht' + i);
                         inputItem.innerHTML = `
@@ -3643,6 +3978,11 @@ function refreshSystemStatus() {
                 data.direct_inputs.forEach(input => {
                     updateDirectInputState(input.id, input.state);
                 });
+            }
+            
+            // Update HT sensors
+            if (data.htSensors) {
+                renderHTSensors(data.htSensors);
             }
             
             // Ensure the visual representations exist and are populated
@@ -4196,6 +4536,7 @@ function showToast(message, type = 'info') {
         toast.className = 'toast';
     }, 3000);
 }
+
 // Initialize Input Interrupts UI
 function initInputInterruptsUI() {
     console.log("Initializing Input Interrupts UI");
@@ -4519,3 +4860,304 @@ window.toggleInterrupt = function(interruptId, enabled) {
     });
 };
 
+// Initialize HT Sensors UI
+function initHTSensorsUI() {
+    // Fetch HT sensor data
+    fetchHTSensors();
+    
+    // Add HT sensors to the analog-inputs page
+    const analogInputsSection = document.getElementById('analog-inputs');
+    if (!analogInputsSection) return;
+    
+    // Check if HT sensors container already exists
+    if (!document.getElementById('ht-sensors-container')) {
+        // Create sensors container
+        const htSensorsContainer = document.createElement('div');
+        htSensorsContainer.id = 'ht-sensors-container';
+        htSensorsContainer.className = 'sensors-container';
+        htSensorsContainer.innerHTML = `
+            <h3>Temperature & Humidity Sensors</h3>
+            <div id="ht-sensors-grid" class="sensors-grid">
+                <!-- HT sensors will be inserted here -->
+            </div>
+        `;
+        
+        // Insert it before the analog chart container
+        const chartContainer = document.querySelector('.analog-chart-container');
+        if (chartContainer) {
+            analogInputsSection.insertBefore(htSensorsContainer, chartContainer);
+        } else {
+            analogInputsSection.appendChild(htSensorsContainer);
+        }
+    }
+    
+    // Create a configuration button for each sensor
+    const configureBtn = document.createElement('button');
+    configureBtn.id = 'configure-ht-sensors';
+    configureBtn.className = 'btn btn-primary';
+    configureBtn.textContent = 'Configure HT Sensors';
+    configureBtn.addEventListener('click', showHTSensorConfigModal);
+    
+    // Add it before the HT sensors container
+    const htSensorsContainer = document.getElementById('ht-sensors-container');
+    if (htSensorsContainer) {
+        htSensorsContainer.parentNode.insertBefore(configureBtn, htSensorsContainer);
+    }
+    
+    // Create the modal for sensor configuration if it doesn't exist
+    createHTSensorConfigModal();
+}
+
+// Function to fetch HT sensor data
+function fetchHTSensors() {
+    fetch('/api/ht-sensors')
+        .then(response => response.json())
+        .then(data => {
+            renderHTSensors(data.htSensors);
+        })
+        .catch(error => {
+            console.error('Error fetching HT sensors data:', error);
+            showToast('Failed to load HT sensors data', 'error');
+        });
+}
+
+// Function to render HT sensors
+function renderHTSensors(sensors) {
+    const htSensorsGrid = document.getElementById('ht-sensors-grid');
+    if (!htSensorsGrid) return;
+    
+    htSensorsGrid.innerHTML = '';
+    
+    sensors.forEach(sensor => {
+        const sensorCard = document.createElement('div');
+        sensorCard.className = 'sensor-card';
+        
+        let sensorContent = '';
+        
+        // Create content based on sensor type
+        switch (sensor.sensorType) {
+            case 0: // Digital Input
+                sensorContent = `
+                    <div class="sensor-header">
+                        <h4>${sensor.pin}</h4>
+                        <span class="sensor-type">${sensor.sensorTypeName}</span>
+                    </div>
+                    <div class="sensor-value ${sensor.value === 'HIGH' ? 'active' : ''}">
+                        ${sensor.value}
+                    </div>
+                `;
+                break;
+                
+            case 1: // DHT11
+            case 2: // DHT22
+                sensorContent = `
+                    <div class="sensor-header">
+                        <h4>${sensor.pin}</h4>
+                        <span class="sensor-type">${sensor.sensorTypeName}</span>
+                    </div>
+                    <div class="sensor-values">
+                        <div class="sensor-temp">
+                            <i class="fas fa-thermometer-half"></i>
+                            <span>${sensor.temperature !== undefined ? sensor.temperature.toFixed(1) : '--'}°C</span>
+                        </div>
+                        <div class="sensor-humidity">
+                            <i class="fas fa-tint"></i>
+                            <span>${sensor.humidity !== undefined ? sensor.humidity.toFixed(1) : '--'}%</span>
+                        </div>
+                    </div>
+                `;
+                break;
+                
+            case 3: // DS18B20
+                sensorContent = `
+                    <div class="sensor-header">
+                        <h4>${sensor.pin}</h4>
+                        <span class="sensor-type">${sensor.sensorTypeName}</span>
+                    </div>
+                    <div class="sensor-values">
+                        <div class="sensor-temp">
+                            <i class="fas fa-thermometer-half"></i>
+                            <span>${sensor.temperature !== undefined ? sensor.temperature.toFixed(1) : '--'}°C</span>
+                        </div>
+                    </div>
+                `;
+                break;
+        }
+        
+        sensorCard.innerHTML = sensorContent;
+        htSensorsGrid.appendChild(sensorCard);
+    });
+}
+
+// Function to create HT sensor configuration modal
+function createHTSensorConfigModal() {
+    // Check if modal already exists
+    if (document.getElementById('ht-sensor-config-modal')) return;
+    
+    const modal = document.createElement('div');
+    modal.id = 'ht-sensor-config-modal';
+    modal.className = 'modal';
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Configure HT Sensors</h3>
+            <form id="ht-sensor-config-form">
+                <!-- HT1 Sensor -->
+                <div class="form-group">
+                    <label for="ht1-sensor-type">HT1 Sensor Type</label>
+                    <select id="ht1-sensor-type" data-index="0">
+                        <option value="0">Digital Input</option>
+                        <option value="1">DHT11</option>
+                        <option value="2">DHT22</option>
+                        <option value="3">DS18B20</option>
+                    </select>
+                </div>
+                
+                <!-- HT2 Sensor -->
+                <div class="form-group">
+                    <label for="ht2-sensor-type">HT2 Sensor Type</label>
+                    <select id="ht2-sensor-type" data-index="1">
+                        <option value="0">Digital Input</option>
+                        <option value="1">DHT11</option>
+                        <option value="2">DHT22</option>
+                        <option value="3">DS18B20</option>
+                    </select>
+                </div>
+                
+                <!-- HT3 Sensor -->
+                <div class="form-group">
+                    <label for="ht3-sensor-type">HT3 Sensor Type</label>
+                    <select id="ht3-sensor-type" data-index="2">
+                        <option value="0">Digital Input</option>
+                        <option value="1">DHT11</option>
+                        <option value="2">DHT22</option>
+                        <option value="3">DS18B20</option>
+                    </select>
+                </div>
+                
+                <div class="sensor-config-info">
+                    <p><strong>Sensor Types:</strong></p>
+                    <ul>
+                        <li><strong>Digital Input:</strong> Use as a standard digital input</li>
+                        <li><strong>DHT11:</strong> Basic temperature/humidity sensor (±2°C, ±5%RH)</li>
+                        <li><strong>DHT22:</strong> Higher precision temperature/humidity sensor (±0.5°C, ±2%RH)</li>
+                        <li><strong>DS18B20:</strong> Precision temperature sensor (±0.5°C)</li>
+                    </ul>
+                    <p><strong>Note:</strong> Changing sensor type will reset any associated schedules or triggers.</p>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-success">Save Configuration</button>
+                    <button type="button" class="btn btn-secondary close-btn">Cancel</button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Setup modal close events
+    const closeButtons = modal.querySelectorAll('.close-modal, .close-btn');
+    closeButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+    });
+    
+    // Setup form submission
+    const form = document.getElementById('ht-sensor-config-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveHTSensorConfig();
+        });
+    }
+    
+    // When modal is clicked outside content area, close it
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+}
+
+// Show HT sensor configuration modal and populate current settings
+function showHTSensorConfigModal() {
+    const modal = document.getElementById('ht-sensor-config-modal');
+    if (!modal) {
+        createHTSensorConfigModal();
+        return showHTSensorConfigModal(); // Retry after creating
+    }
+    
+    // Fetch current sensor configuration
+    fetch('/api/ht-sensors')
+        .then(response => response.json())
+        .then(data => {
+            // Populate form with current settings
+            data.htSensors.forEach(sensor => {
+                const selectElement = document.getElementById(`ht${sensor.index + 1}-sensor-type`);
+                if (selectElement) {
+                    selectElement.value = sensor.sensorType;
+                }
+            });
+            
+            // Display the modal
+            modal.style.display = 'block';
+        })
+        .catch(error => {
+            console.error('Error fetching sensor configuration:', error);
+            showToast('Failed to load sensor configuration', 'error');
+            
+            // Still show the modal with default values
+            modal.style.display = 'block';
+        });
+}
+
+// Save HT sensor configuration
+function saveHTSensorConfig() {
+    // Collect configuration from form
+    const configs = [];
+    
+    for (let i = 0; i < 3; i++) {
+        const select = document.getElementById(`ht${i + 1}-sensor-type`);
+        if (select) {
+            configs.push({
+                index: i,
+                sensorType: parseInt(select.value)
+            });
+        }
+    }
+    
+    // Save each sensor configuration one by one
+    const savePromises = configs.map(config => {
+        return fetch('/api/ht-sensors', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ sensor: config })
+        })
+        .then(response => response.json());
+    });
+    
+    // Wait for all saves to complete
+    Promise.all(savePromises)
+        .then(() => {
+            // Hide the modal
+            const modal = document.getElementById('ht-sensor-config-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+            
+            // Show success message
+            showToast('Sensor configuration saved successfully', 'success');
+            
+            // Refresh sensor display
+            fetchHTSensors();
+        })
+        .catch(error => {
+            console.error('Error saving sensor configuration:', error);
+            showToast('Failed to save sensor configuration', 'error');
+        });
+}
