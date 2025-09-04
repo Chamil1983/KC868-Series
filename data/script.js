@@ -279,6 +279,7 @@ function initApp() {
     initSettingsUI();
     initDiagnosticsUI();
     initCommunicationUI();
+    initNetworkUI(); 
     
     // Setup event listeners for quick actions
     const allRelaysOnBtn = document.getElementById('all-relays-on');
@@ -328,6 +329,38 @@ function initApp() {
     
     // Show a welcome toast
     showToast('Welcome to KC868-A16 Smart Home Controller');
+}
+
+// Enhance the updateDashboard function to show network info
+function updateDashboard(data) {
+    // Update device name
+    document.getElementById('device-name').textContent = data.device;
+    
+    // Update system uptime
+    document.getElementById('system-uptime').textContent = data.uptime;
+    
+    // Update connection info
+    document.getElementById('wifi-status').className = data.wifi_connected ? 'indicator connected' : 'indicator disconnected';
+    document.getElementById('eth-status').className = data.eth_connected ? 'indicator connected' : 'indicator disconnected';
+    document.getElementById('protocol-status').textContent = data.active_protocol;
+    
+    // Update IP addresses
+    document.getElementById('wifi-ip').textContent = data.wifi_ip || 'Not connected';
+    document.getElementById('eth-ip').textContent = data.eth_ip || 'Not connected';
+    document.getElementById('mac-address').textContent = data.mac || '--';
+    document.getElementById('active-protocol').textContent = data.active_protocol || '--';
+    
+    // Update network details if available
+    if (data.network) {
+        // Add any additional network details to dashboard
+        if (document.getElementById('network-mode')) {
+            let mode = 'Unknown';
+            if (data.eth_connected) mode = 'Ethernet';
+            else if (data.wifi_client_mode) mode = 'WiFi Client';
+            else if (data.wifi_ap_mode) mode = 'Access Point';
+            document.getElementById('network-mode').textContent = mode;
+        }
+    }
 }
 
 // New function to monitor data freshness and ensure real-time updates
@@ -5161,3 +5194,261 @@ function saveHTSensorConfig() {
             showToast('Failed to save sensor configuration', 'error');
         });
 }
+
+// Network settings functionality
+function initNetworkUI() {
+    console.log("Initializing Network UI");
+    
+    // Load network settings
+    fetchNetworkSettings();
+    
+    // Set up DHCP toggle
+    const dhcpToggle = document.getElementById('network-dhcp-mode');
+    if (dhcpToggle) {
+        dhcpToggle.addEventListener('change', function() {
+            const staticSettings = document.getElementById('network-static-settings');
+            if (staticSettings) {
+                staticSettings.style.display = this.checked ? 'none' : 'block';
+            }
+        });
+    }
+    
+    // Set up WiFi connection form
+    const wifiForm = document.getElementById('wifi-connect-form');
+    if (wifiForm) {
+        wifiForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            connectToWiFi();
+        });
+    }
+    
+    // Set up network settings form
+    const networkForm = document.getElementById('network-settings-form');
+    if (networkForm) {
+        networkForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveNetworkSettings();
+        });
+    }
+}
+
+// Fetch network settings from server
+function fetchNetworkSettings() {
+    fetch('/api/network/settings')
+        .then(response => response.json())
+        .then(data => {
+            // Update DHCP mode toggle
+            const dhcpToggle = document.getElementById('network-dhcp-mode');
+            if (dhcpToggle) {
+                dhcpToggle.checked = data.dhcp_mode;
+            }
+            
+            // Show/hide static settings
+            const staticSettings = document.getElementById('network-static-settings');
+            if (staticSettings) {
+                staticSettings.style.display = data.dhcp_mode ? 'none' : 'block';
+            }
+            
+            // Fill in static IP settings
+            if (!data.dhcp_mode) {
+                if (document.getElementById('network-ip')) {
+                    document.getElementById('network-ip').value = data.ip || '';
+                }
+                if (document.getElementById('network-gateway')) {
+                    document.getElementById('network-gateway').value = data.gateway || '';
+                }
+                if (document.getElementById('network-subnet')) {
+                    document.getElementById('network-subnet').value = data.subnet || '';
+                }
+                if (document.getElementById('network-dns1')) {
+                    document.getElementById('network-dns1').value = data.dns1 || '';
+                }
+                if (document.getElementById('network-dns2')) {
+                    document.getElementById('network-dns2').value = data.dns2 || '';
+                }
+            }
+            
+            // Fill in WiFi settings
+            if (document.getElementById('network-wifi-ssid')) {
+                document.getElementById('network-wifi-ssid').value = data.wifi_ssid || '';
+            }
+            
+            // Update current connection status
+            updateNetworkStatusDisplay(data);
+        })
+        .catch(error => {
+            console.error('Error fetching network settings:', error);
+            showToast('Failed to load network settings', 'error');
+        });
+}
+
+// Update network status display
+function updateNetworkStatusDisplay(data) {
+    // Update WiFi status
+    const wifiStatus = document.getElementById('network-wifi-status');
+    if (wifiStatus) {
+        if (data.wifi_client_mode) {
+            wifiStatus.innerHTML = `
+                <div class="status-card success">
+                    <h4>WiFi Client Connected</h4>
+                    <p><strong>SSID:</strong> ${data.wifi_ssid || 'Unknown'}</p>
+                    <p><strong>IP:</strong> ${data.wifi_ip || 'Not assigned'}</p>
+                    <p><strong>Gateway:</strong> ${data.wifi_gateway || 'Unknown'}</p>
+                    <p><strong>Signal:</strong> ${data.wifi_rssi || '0'} dBm</p>
+                </div>
+            `;
+        } else if (data.wifi_ap_mode) {
+            wifiStatus.innerHTML = `
+                <div class="status-card warning">
+                    <h4>Access Point Mode Active</h4>
+                    <p><strong>SSID:</strong> KC868-A16</p>
+                    <p><strong>IP:</strong> ${data.wifi_ap_ip || '192.168.4.1'}</p>
+                    <p><strong>WiFi Client Mode:</strong> Disconnected</p>
+                </div>
+            `;
+        } else {
+            wifiStatus.innerHTML = `
+                <div class="status-card error">
+                    <h4>WiFi Disconnected</h4>
+                    <p>Not connected to any wireless network</p>
+                </div>
+            `;
+        }
+    }
+    
+    // Update Ethernet status
+    const ethStatus = document.getElementById('network-eth-status');
+    if (ethStatus) {
+        if (data.eth_connected) {
+            ethStatus.innerHTML = `
+                <div class="status-card success">
+                    <h4>Ethernet Connected</h4>
+                    <p><strong>IP:</strong> ${data.eth_ip || 'Not assigned'}</p>
+                    <p><strong>Gateway:</strong> ${data.eth_gateway || 'Unknown'}</p>
+                    <p><strong>Speed:</strong> ${data.eth_speed || 'Unknown'}</p>
+                    <p><strong>Duplex:</strong> ${data.eth_duplex || 'Unknown'}</p>
+                </div>
+            `;
+        } else {
+            ethStatus.innerHTML = `
+                <div class="status-card error">
+                    <h4>Ethernet Disconnected</h4>
+                    <p>No wired connection detected</p>
+                </div>
+            `;
+        }
+    }
+    
+    // Update connection type badge
+    const connectionType = document.getElementById('connection-type');
+    if (connectionType) {
+        if (data.eth_connected) {
+            connectionType.innerHTML = `<span class="badge badge-success">Ethernet</span>`;
+        } else if (data.wifi_client_mode) {
+            connectionType.innerHTML = `<span class="badge badge-primary">WiFi Client</span>`;
+        } else if (data.wifi_ap_mode) {
+            connectionType.innerHTML = `<span class="badge badge-warning">Access Point</span>`;
+        } else {
+            connectionType.innerHTML = `<span class="badge badge-danger">No Connection</span>`;
+        }
+    }
+    
+    // Update DHCP status
+    const dhcpStatus = document.getElementById('dhcp-status');
+    if (dhcpStatus) {
+        dhcpStatus.innerHTML = data.dhcp_mode ? 
+            `<span class="badge badge-info">DHCP Enabled</span>` : 
+            `<span class="badge badge-secondary">Static IP</span>`;
+    }
+}
+
+// Connect to WiFi network
+function connectToWiFi() {
+    const ssid = document.getElementById('wifi-ssid').value;
+    const password = document.getElementById('wifi-password').value;
+    
+    if (!ssid) {
+        showToast('Please enter a WiFi network name (SSID)', 'warning');
+        return;
+    }
+    
+    showToast('Connecting to WiFi...', 'info');
+    
+    const wifiData = {
+        wifi_ssid: ssid,
+        wifi_password: password
+    };
+    
+    fetch('/api/network/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(wifiData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast('WiFi settings updated. Device is connecting...', 'success');
+            setTimeout(() => {
+                showToast('Waiting for connection. Page will reload in 10 seconds...', 'info');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 10000);
+            }, 2000);
+        } else {
+            showToast(`Failed to update WiFi settings: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error updating WiFi settings:', error);
+        showToast('Network error. Could not update WiFi settings', 'error');
+    });
+}
+
+// Save network settings
+function saveNetworkSettings() {
+    const dhcpMode = document.getElementById('network-dhcp-mode').checked;
+    
+    const networkData = {
+        dhcp_mode: dhcpMode
+    };
+    
+    // Add static IP settings if DHCP is disabled
+    if (!dhcpMode) {
+        networkData.ip = document.getElementById('network-ip').value;
+        networkData.gateway = document.getElementById('network-gateway').value;
+        networkData.subnet = document.getElementById('network-subnet').value;
+        networkData.dns1 = document.getElementById('network-dns1').value;
+        networkData.dns2 = document.getElementById('network-dns2').value;
+    }
+    
+    showToast('Saving network settings...', 'info');
+    
+    fetch('/api/network/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(networkData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showToast('Network settings saved. Device will restart.', 'success');
+            setTimeout(() => {
+                showToast('Waiting for device to restart. Page will reload in 15 seconds...', 'info');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 15000);
+            }, 2000);
+        } else {
+            showToast(`Failed to save network settings: ${data.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving network settings:', error);
+        showToast('Network error. Could not save settings', 'error');
+    });
+}
+

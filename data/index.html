@@ -40,6 +40,7 @@
                 <li><a href="#schedules" data-section="schedules">Schedules</a></li>
                 <li><a href="#analog-triggers" data-section="analog-triggers">Analog Triggers</a></li>
                 <li><a href="#communication" data-section="communication">Communication</a></li>
+                <li><a href="#network" data-section="network">Network</a></li>
                 <li><a href="#settings" data-section="settings">Settings</a></li>
                 <li><a href="#diagnostics" data-section="diagnostics">Diagnostics</a></li>
             </ul>
@@ -59,6 +60,7 @@
                             <p><strong>Ethernet IP:</strong> <span id="eth-ip">--</span></p>
                             <p><strong>MAC Address:</strong> <span id="mac-address">--</span></p>
                             <p><strong>Active Protocol:</strong> <span id="active-protocol">--</span></p>
+                            <p><strong>Network Mode:</strong> <span id="network-mode">--</span></p>
                         </div>
                     </div>
                     
@@ -685,6 +687,106 @@
                 </div>
             </section>
             
+            <!-- Network Section -->
+            <section id="network">
+                <h2>Network Configuration</h2>
+                
+                <div class="network-grid">
+                    <!-- Current Status -->
+                    <div class="network-card">
+                        <h3>Connection Status</h3>
+                        <div class="network-status-grid">
+                            <div class="status-item">
+                                <strong>Connection Type:</strong>
+                                <span id="connection-type"><span class="badge badge-secondary">Checking...</span></span>
+                            </div>
+                            <div class="status-item">
+                                <strong>IP Configuration:</strong>
+                                <span id="dhcp-status"><span class="badge badge-secondary">Checking...</span></span>
+                            </div>
+                        </div>
+                        
+                        <div class="network-status-panels">
+                            <div id="network-eth-status">
+                                <div class="status-card loading">
+                                    <h4>Checking Ethernet Status...</h4>
+                                </div>
+                            </div>
+                            
+                            <div id="network-wifi-status">
+                                <div class="status-card loading">
+                                    <h4>Checking WiFi Status...</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- WiFi Connection -->
+                    <div class="network-card">
+                        <h3>WiFi Connection</h3>
+                        <form id="wifi-connect-form">
+                            <div class="form-group">
+                                <label for="wifi-ssid">WiFi Network Name (SSID)</label>
+                                <input type="text" id="wifi-ssid" placeholder="Enter WiFi network name">
+                            </div>
+                            <div class="form-group">
+                                <label for="wifi-password">WiFi Password</label>
+                                <input type="password" id="wifi-password" placeholder="Enter WiFi password">
+                            </div>
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-primary">Connect to WiFi</button>
+                            </div>
+                            <div class="form-note">
+                                <p>Note: The device will disconnect from the current network when connecting to a new WiFi network.</p>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- Network Settings -->
+                    <div class="network-card">
+                        <h3>Network Settings</h3>
+                        <form id="network-settings-form">
+                            <div class="form-group">
+                                <label for="network-dhcp-mode">Use DHCP (Automatic IP)</label>
+                                <input type="checkbox" id="network-dhcp-mode" checked>
+                            </div>
+                            
+                            <div id="network-static-settings" style="display: none;">
+                                <div class="form-group">
+                                    <label for="network-ip">IP Address</label>
+                                    <input type="text" id="network-ip" placeholder="192.168.1.100">
+                                </div>
+                                <div class="form-group">
+                                    <label for="network-gateway">Gateway</label>
+                                    <input type="text" id="network-gateway" placeholder="192.168.1.1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="network-subnet">Subnet Mask</label>
+                                    <input type="text" id="network-subnet" placeholder="255.255.255.0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="network-dns1">Primary DNS</label>
+                                    <input type="text" id="network-dns1" placeholder="8.8.8.8">
+                                </div>
+                                <div class="form-group">
+                                    <label for="network-dns2">Secondary DNS</label>
+                                    <input type="text" id="network-dns2" placeholder="8.8.4.4">
+                                </div>
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-success">Save Network Settings</button>
+                                <button type="button" id="refresh-network" class="btn btn-secondary">Refresh Status</button>
+                            </div>
+                            
+                            <div class="form-note">
+                                <p>Note: Saving network settings will restart the device. If you change the IP address, you'll need to reconnect using the new address.</p>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+            
             <!-- Settings Section -->
             <section id="settings">
                 <h2>Settings</h2>
@@ -834,5 +936,130 @@
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="script.js"></script>
+
+    <style>
+    /* Network section styles */
+    .network-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+    }
+    
+    .network-card {
+        background-color: white;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        padding: 15px;
+    }
+    
+    .network-status-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    
+    .status-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .network-status-panels {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .status-card {
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+    }
+    
+    .status-card.success {
+        background-color: #e8f5e9;
+        border-left: 4px solid #4CAF50;
+    }
+    
+    .status-card.warning {
+        background-color: #fff3e0;
+        border-left: 4px solid #FF9800;
+    }
+    
+    .status-card.error {
+        background-color: #ffebee;
+        border-left: 4px solid #F44336;
+    }
+    
+    .status-card.loading {
+        background-color: #e3f2fd;
+        border-left: 4px solid #2196F3;
+    }
+    
+    .status-card h4 {
+        margin-top: 0;
+        margin-bottom: 10px;
+    }
+    
+    .status-card p {
+        margin: 5px 0;
+    }
+    
+    .form-note {
+        margin-top: 15px;
+        padding: 10px;
+        background-color: #f5f5f5;
+        border-radius: 5px;
+        font-size: 0.9em;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 3px 7px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        font-weight: bold;
+        color: white;
+    }
+    
+    .badge-success {
+        background-color: #4CAF50;
+    }
+    
+    .badge-primary {
+        background-color: #2196F3;
+    }
+    
+    .badge-warning {
+        background-color: #FF9800;
+    }
+    
+    .badge-danger {
+        background-color: #F44336;
+    }
+    
+    .badge-info {
+        background-color: #00BCD4;
+    }
+    
+    .badge-secondary {
+        background-color: #757575;
+    }
+    
+    /* Enhanced dashboard network info */
+    .dashboard-network-info {
+        background-color: #f9f9f9;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 10px;
+    }
+    
+    @media (max-width: 768px) {
+        .network-status-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    </style>
 </body>
 </html>
