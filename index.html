@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KC868-A16 Controller</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>KC868-A16 Smart Home Controller</h1>
+            <div class="system-status">
+                <div class="status-indicator">
+                    <span class="indicator-label">WiFi:</span>
+                    <span id="wifi-status" class="indicator disconnected"><i class="fa fa-wifi"></i></span>
+                </div>
+                <div class="status-indicator">
+                    <span class="indicator-label">Ethernet:</span>
+                    <span id="eth-status" class="indicator disconnected"><i class="fa fa-network-wired"></i></span>
+                </div>
+                <div class="status-indicator">
+                    <span class="indicator-label">Protocol:</span>
+                    <span id="protocol-status" class="indicator">Unknown</span>
+                </div>
+                <div class="status-time">
+                    <span id="current-time">--:--:--</span>
+                </div>
+            </div>
+        </header>
+        
+        <nav>
+            <ul>
+                <li><a href="#dashboard" class="active" data-section="dashboard">Dashboard</a></li>
+                <li><a href="#relay-control" data-section="relay-control">Relay Control</a></li>
+                <li><a href="#input-status" data-section="input-status">Input Status</a></li>
+                <li><a href="#input-interrupts" data-section="input-interrupts">Input Interrupts</a></li>
+                <li><a href="#analog-inputs" data-section="analog-inputs">Analog Inputs</a></li>
+                <li><a href="#schedules" data-section="schedules">Schedules</a></li>
+                <li><a href="#analog-triggers" data-section="analog-triggers">Analog Triggers</a></li>
+                <li><a href="#communication" data-section="communication">Communication</a></li>
+                <li><a href="#network" data-section="network">Network</a></li>
+                <li><a href="#settings" data-section="settings">Settings</a></li>
+                <li><a href="#diagnostics" data-section="diagnostics">Diagnostics</a></li>
+            </ul>
+        </nav>
+        
+        <main>
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="active">
+                <h2>Dashboard</h2>
+                <div class="dashboard-grid">
+                    <div class="dashboard-card">
+                        <h3>System Status</h3>
+                        <div class="system-info">
+                            <p><strong>Device Name:</strong> <span id="device-name">KC868-A16</span></p>
+                            <p><strong>Uptime:</strong> <span id="system-uptime">0</span> seconds</p>
+                            <p><strong>WiFi IP:</strong> <span id="wifi-ip">--</span></p>
+                            <p><strong>Ethernet IP:</strong> <span id="eth-ip">--</span></p>
+                            <p><strong>MAC Address:</strong> <span id="mac-address">--</span></p>
+                            <p><strong>Active Protocol:</strong> <span id="active-protocol">--</span></p>
+                            <p><strong>Network Mode:</strong> <span id="network-mode">--</span></p>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-card">
+                        <h3>Quick Actions</h3>
+                        <div class="quick-actions">
+                            <button id="all-relays-on" class="btn btn-success">All Relays ON</button>
+                            <button id="all-relays-off" class="btn btn-danger">All Relays OFF</button>
+                            <button id="refresh-status" class="btn btn-primary">Refresh Status</button>
+                            <button id="reboot-device" class="btn btn-warning">Reboot Device</button>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-card">
+                        <h3>Active Inputs</h3>
+                        <div id="active-inputs" class="status-grid">
+                            <p>No active inputs</p>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-card">
+                        <h3>Active Outputs</h3>
+                        <div id="active-outputs" class="status-grid">
+                            <p>No active outputs</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Relay Control Section -->
+            <section id="relay-control">
+                <h2>Relay Control</h2>
+                <div class="control-options">
+                    <div class="select-options">
+                        <label><input type="checkbox" id="select-all-relays"> Select All</label>
+                        <button id="selected-relays-on" class="btn btn-success">Turn Selected ON</button>
+                        <button id="selected-relays-off" class="btn btn-danger">Turn Selected OFF</button>
+                    </div>
+                </div>
+                <div id="relays-grid" class="relays-grid">
+                    <!-- Relay controls will be generated by JavaScript -->
+                </div>
+                
+                <!-- Visual representation of outputs -->
+                <div class="visual-panel">
+                    <h3>Visual Output Status</h3>
+                    <div class="output-visual-grid">
+                        <!-- Visual representations will be generated by JavaScript -->
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Input Status Section -->
+            <section id="input-status">
+                <h2>Input Status</h2>
+                <div class="input-grid">
+                    <div class="input-group">
+                        <h3>Digital Inputs</h3>
+                        <div id="digital-inputs-grid" class="status-grid">
+                            <!-- Digital inputs will be generated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <h3>Direct Inputs (HT1-HT3)</h3>
+                        <div id="direct-inputs-grid" class="status-grid">
+                            <!-- Direct inputs will be generated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Visual representation of all inputs -->
+                <div class="visual-panel">
+                    <h3>Visual Input Status</h3>
+                    <div class="input-visual-grid">
+                        <!-- Visual representations will be generated by JavaScript -->
+                    </div>
+                </div>
+            </section>
+
+<!-- Update the Input Interrupts Section in index.html -->
+<section id="input-interrupts">
+    <h2>Input Interrupt Configuration</h2>
+    <p>Configure digital inputs to work as interrupts with different priority levels.</p>
+    
+    <div class="control-options">
+        <button id="configure-all-interrupts" class="btn btn-primary">Batch Configure</button>
+        <button id="enable-all-interrupts" class="btn btn-success">Enable All</button>
+        <button id="disable-all-interrupts" class="btn btn-danger">Disable All</button>
+    </div>
+    
+    <div class="interrupts-container">
+        <table id="interrupts-table" class="data-table">
+            <thead>
+                <tr>
+                    <th>Enabled</th>
+                    <th>Name</th>
+                    <th>Priority</th>
+                    <th>Input</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Interrupt rows will be generated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Interrupt Configuration Modal -->
+    <div id="interrupt-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Configure Input Interrupt</h3>
+            <form id="interrupt-form">
+                <input type="hidden" id="interrupt-id">
+                <div class="form-group">
+                    <label for="interrupt-enabled">Enabled</label>
+                    <input type="checkbox" id="interrupt-enabled">
+                </div>
+                <div class="form-group">
+                    <label for="interrupt-name">Name</label>
+                    <input type="text" id="interrupt-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="interrupt-input">Input</label>
+                    <select id="interrupt-input" required>
+                        <!-- Options for inputs 1-16 -->
+                        <option value="0">Input 1</option>
+                        <option value="1">Input 2</option>
+                        <option value="2">Input 3</option>
+                        <option value="3">Input 4</option>
+                        <option value="4">Input 5</option>
+                        <option value="5">Input 6</option>
+                        <option value="6">Input 7</option>
+                        <option value="7">Input 8</option>
+                        <option value="8">Input 9</option>
+                        <option value="9">Input 10</option>
+                        <option value="10">Input 11</option>
+                        <option value="11">Input 12</option>
+                        <option value="12">Input 13</option>
+                        <option value="13">Input 14</option>
+                        <option value="14">Input 15</option>
+                        <option value="15">Input 16</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="interrupt-priority">Priority</label>
+                    <select id="interrupt-priority" required>
+                        <option value="0">None (Polling)</option>
+                        <option value="1">High</option>
+                        <option value="2">Medium</option>
+                        <option value="3">Low</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="interrupt-trigger-type">Trigger Type</label>
+                    <select id="interrupt-trigger-type" required>
+                        <option value="0">Rising Edge (LOW to HIGH)</option>
+                        <option value="1">Falling Edge (HIGH to LOW)</option>
+                        <option value="2">Change (Both Edges)</option>
+                        <option value="3">High Level</option>
+                        <option value="4">Low Level</option>
+                    </select>
+                </div>
+                <div class="priority-description">
+                    <p><strong>Priority Levels:</strong></p>
+                    <ul>
+                        <li><strong>High:</strong> Processed first when multiple inputs change</li>
+                        <li><strong>Medium:</strong> Processed after all high priority inputs</li>
+                        <li><strong>Low:</strong> Processed after all high and medium priority inputs</li>
+                        <li><strong>None:</strong> No interrupt, input is polled periodically</li>
+                    </ul>
+                </div>
+                <div class="trigger-description">
+                    <p><strong>Trigger Types:</strong></p>
+                    <ul>
+                        <li><strong>Rising Edge:</strong> Triggers when input changes from LOW to HIGH</li>
+                        <li><strong>Falling Edge:</strong> Triggers when input changes from HIGH to LOW</li>
+                        <li><strong>Change:</strong> Triggers on any state change (both edges)</li>
+                        <li><strong>High Level:</strong> Triggers continuously while input is HIGH</li>
+                        <li><strong>Low Level:</strong> Triggers continuously while input is LOW</li>
+                    </ul>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-success">Save</button>
+                    <button type="button" class="btn btn-secondary close-btn">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+            
+            <!-- Analog Inputs Section -->
+            <section id="analog-inputs">
+                <h2>Analog Inputs</h2>
+                
+                <!-- Container for HT sensor configuration button - will be added by JavaScript -->
+                
+                <!-- Container for HT sensors - will be added by JavaScript -->
+                <div id="ht-sensors-container" class="sensors-container">
+                    <h3>Temperature & Humidity Sensors</h3>
+                    <div id="ht-sensors-grid" class="sensors-grid">
+                        <!-- HT sensors will be inserted here by JavaScript -->
+                    </div>
+                </div>
+                
+                <div id="analog-inputs-grid" class="analog-grid">
+                    <!-- Analog input displays will be generated by JavaScript -->
+                </div>
+                
+                <!-- Visual representation of analog inputs -->
+                <div class="analog-visual-container">
+                    <h3>Visual Analog Status</h3>
+                    <div class="analog-visual-grid">
+                        <!-- Visual bar graphs will be generated by JavaScript -->
+                    </div>
+                </div>
+                
+                <div class="analog-chart-container">
+                    <h3>Analog Input History</h3>
+                    <canvas id="analog-chart"></canvas>
+                </div>
+            </section>
+            
+            <!-- HT Sensor Configuration Modal -->
+            <div id="ht-sensor-config-modal" class="modal">
+                <div class="modal-content">
+                    <span class="close-modal">&times;</span>
+                    <h3>Configure HT Sensors</h3>
+                    <form id="ht-sensor-config-form">
+                        <!-- HT1 Sensor -->
+                        <div class="form-group">
+                            <label for="ht1-sensor-type">HT1 Sensor Type</label>
+                            <select id="ht1-sensor-type" data-index="0">
+                                <option value="0">Digital Input</option>
+                                <option value="1">DHT11</option>
+                                <option value="2">DHT22</option>
+                                <option value="3">DS18B20</option>
+                            </select>
+                        </div>
+                        
+                        <!-- HT2 Sensor -->
+                        <div class="form-group">
+                            <label for="ht2-sensor-type">HT2 Sensor Type</label>
+                            <select id="ht2-sensor-type" data-index="1">
+                                <option value="0">Digital Input</option>
+                                <option value="1">DHT11</option>
+                                <option value="2">DHT22</option>
+                                <option value="3">DS18B20</option>
+                            </select>
+                        </div>
+                        
+                        <!-- HT3 Sensor -->
+                        <div class="form-group">
+                            <label for="ht3-sensor-type">HT3 Sensor Type</label>
+                            <select id="ht3-sensor-type" data-index="2">
+                                <option value="0">Digital Input</option>
+                                <option value="1">DHT11</option>
+                                <option value="2">DHT22</option>
+                                <option value="3">DS18B20</option>
+                            </select>
+                        </div>
+                        
+                        <div class="sensor-config-info">
+                            <p><strong>Sensor Types:</strong></p>
+                            <ul>
+                                <li><strong>Digital Input:</strong> Use as a standard digital input</li>
+                                <li><strong>DHT11:</strong> Basic temperature/humidity sensor (±2°C, ±5%RH)</li>
+                                <li><strong>DHT22:</strong> Higher precision temperature/humidity sensor (±0.5°C, ±2%RH)</li>
+                                <li><strong>DS18B20:</strong> Precision temperature sensor (±0.5°C)</li>
+                            </ul>
+                            <p><strong>Note:</strong> Changing sensor type will reset any associated schedules or triggers.</p>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-success">Save Configuration</button>
+                            <button type="button" class="btn btn-secondary close-btn">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Schedules Section -->
+            <section id="schedules">
+                <h2>Schedules</h2>
+                <button id="add-schedule" class="btn btn-primary">Add Schedule</button>
+                <div class="schedules-container">
+                    <table id="schedules-table" class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Enabled</th>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Trigger</th>
+                                <th>Action</th>
+                                <th>Target</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Schedule rows will be generated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Schedule Edit Modal -->
+                <div id="schedule-modal" class="modal">
+                    <div class="modal-content">
+                        <span class="close-modal">&times;</span>
+                        <h3>Edit Schedule</h3>
+                        <form id="schedule-form">
+                            <input type="hidden" id="schedule-id">
+                            <div class="form-group">
+                                <label for="schedule-enabled">Enabled</label>
+                                <input type="checkbox" id="schedule-enabled">
+                            </div>
+                            <div class="form-group">
+                                <label for="schedule-name">Name</label>
+                                <input type="text" id="schedule-name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="schedule-trigger-type">Trigger Type</label>
+                                <select id="schedule-trigger-type" required>
+                                    <option value="0">Time-based</option>
+                                    <option value="1">Input-based</option>
+                                    <option value="2">Combined (Time + Input)</option>
+                                    <option value="3">Sensor-based</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Time-based trigger fields -->
+                            <div id="time-trigger-section">
+                                <div class="form-group">
+                                    <label>Days</label>
+                                    <div class="days-selector">
+                                        <label><input type="checkbox" data-day="0"> Sun</label>
+                                        <label><input type="checkbox" data-day="1"> Mon</label>
+                                        <label><input type="checkbox" data-day="2"> Tue</label>
+                                        <label><input type="checkbox" data-day="3"> Wed</label>
+                                        <label><input type="checkbox" data-day="4"> Thu</label>
+                                        <label><input type="checkbox" data-day="5"> Fri</label>
+                                        <label><input type="checkbox" data-day="6"> Sat</label>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="schedule-time">Time</label>
+                                    <input type="time" id="schedule-time" required>
+                                </div>
+                            </div>
+                            
+                            <!-- Input-based trigger fields -->
+                            <div id="input-trigger-section">
+                                <div class="form-group">
+                                    <label>Select Digital Inputs</label>
+                                    <div id="input-checkboxes" class="checkbox-grid">
+                                        <!-- Will be filled by JavaScript -->
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Select Direct Inputs</label>
+                                    <div id="ht-input-checkboxes" class="checkbox-grid">
+                                        <!-- Will be filled by JavaScript -->
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="schedule-input-logic">Logic</label>
+                                    <select id="schedule-input-logic">
+                                        <option value="0">AND (All conditions must be met)</option>
+                                        <option value="1">OR (Any condition triggers)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <!-- Sensor-based trigger fields -->
+                            <div id="sensor-trigger-section">
+                                <div class="form-group">
+                                    <label for="schedule-sensor">Select Sensor</label>
+                                    <select id="schedule-sensor" required>
+                                        <option value="0">HT1</option>
+                                        <option value="1">HT2</option>
+                                        <option value="2">HT3</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="schedule-sensor-type">Measurement Type</label>
+                                    <select id="schedule-sensor-type" required>
+                                        <option value="0">Temperature (°C)</option>
+                                        <option value="1">Humidity (%)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="schedule-sensor-condition">Condition</label>
+                                    <select id="schedule-sensor-condition" required>
+                                        <option value="0">Above</option>
+                                        <option value="1">Below</option>
+                                        <option value="2">Equal to (±0.5)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="schedule-sensor-threshold" id="sensor-threshold-label">Threshold (°C)</label>
+                                    <input type="number" id="schedule-sensor-threshold" step="0.1" min="-40" max="125" value="25.0" required>
+                                </div>
+                                <div class="sensor-triggers-info">
+                                    <p><strong>Sensor Trigger Settings:</strong></p>
+                                    <ul>
+                                        <li>HT pins must be configured as sensors (DHT11, DHT22, or DS18B20)</li>
+                                        <li>For humidity, only DHT11 and DHT22 sensors provide readings</li>
+                                        <li>Temperature range: -40°C to 125°C</li>
+                                        <li>Humidity range: 0% to 100%</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div id="input-condition-sections">
+                                <div class="form-group input-condition-section">
+                                    <label>Relays to control when inputs are HIGH</label>
+                                    <div id="relay-checkboxes-high" class="checkbox-grid">
+                                        <!-- Will be filled by JavaScript -->
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group input-condition-section">
+                                    <label>Relays to control when inputs are LOW</label>
+                                    <div id="relay-checkboxes-low" class="checkbox-grid">
+                                        <!-- Will be filled by JavaScript -->
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="schedule-action">Action</label>
+                                <select id="schedule-action" required>
+                                    <option value="0">Turn OFF</option>
+                                    <option value="1">Turn ON</option>
+                                    <option value="2">Toggle</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="schedule-target-type">Target Type</label>
+                                <select id="schedule-target-type" required>
+                                    <option value="0">Single Relay</option>
+                                    <option value="1">Multiple Relays</option>
+                                </select>
+                            </div>
+                            <div id="single-target" class="form-group">
+                                <label for="schedule-target-id">Target Relay</label>
+                                <select id="schedule-target-id">
+                                    <!-- Options will be filled by JavaScript -->
+                                </select>
+                            </div>
+                            <div id="multiple-targets" class="form-group" style="display:none;">
+                                <label>Select Relays</label>
+                                <div id="relay-checkboxes" class="checkbox-grid">
+                                    <!-- Will be filled by JavaScript -->
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-success">Save</button>
+                                <button type="button" class="btn btn-secondary close-btn">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Analog Triggers Section -->
+            <section id="analog-triggers">
+                <h2>Analog Triggers</h2>
+                <button id="add-trigger" class="btn btn-primary">Add Trigger</button>
+                <div class="triggers-container">
+                    <table id="triggers-table" class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Enabled</th>
+                                <th>Name</th>
+                                <th>Input</th>
+                                <th>Condition</th>
+                                <th>Threshold</th>
+                                <th>Action</th>
+                                <th>Target</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Trigger rows will be generated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Trigger Edit Modal -->
+                <div id="trigger-modal" class="modal">
+                    <div class="modal-content">
+                        <span class="close-modal">&times;</span>
+                        <h3>Edit Analog Trigger</h3>
+                        <form id="trigger-form">
+                            <input type="hidden" id="trigger-id">
+                            <div class="form-group">
+                                <label for="trigger-enabled">Enabled</label>
+                                <input type="checkbox" id="trigger-enabled">
+                            </div>
+                            <div class="form-group">
+                                <label for="trigger-name">Name</label>
+                                <input type="text" id="trigger-name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="trigger-input">Analog Input</label>
+                                <select id="trigger-input" required>
+                                    <option value="0">A1</option>
+                                    <option value="1">A2</option>
+                                    <option value="2">A3</option>
+                                    <option value="3">A4</option>
+                                    <!-- HT sensor options will be added by JavaScript -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="trigger-condition">Condition</label>
+                                <select id="trigger-condition" required>
+                                    <option value="0">Above</option>
+                                    <option value="1">Below</option>
+                                    <option value="2">Equal to (±50)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="trigger-threshold">Threshold (0-4095)</label>
+                                <input type="range" id="trigger-threshold" min="0" max="4095" step="1">
+                                <span id="threshold-value">2048</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="trigger-action">Action</label>
+                                <select id="trigger-action" required>
+                                    <option value="0">Turn OFF</option>
+                                    <option value="1">Turn ON</option>
+                                    <option value="2">Toggle</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="trigger-target-type">Target Type</label>
+                                <select id="trigger-target-type" required>
+                                    <option value="0">Single Relay</option>
+                                    <option value="1">Multiple Relays</option>
+                                </select>
+                            </div>
+                            <div id="trigger-single-target" class="form-group">
+                                <label for="trigger-target-id">Target Relay</label>
+                                <select id="trigger-target-id">
+                                    <!-- Options will be filled by JavaScript -->
+                                </select>
+                            </div>
+                            <div id="trigger-multiple-targets" class="form-group" style="display:none;">
+                                <label>Select Relays</label>
+                                <div id="trigger-relay-checkboxes" class="checkbox-grid">
+                                    <!-- Will be filled by JavaScript -->
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-success">Save</button>
+                                <button type="button" class="btn btn-secondary close-btn">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Communication Section -->
+            <section id="communication">
+                <h2>Communication Settings</h2>
+                <div class="comm-grid">
+                    <div class="comm-card">
+                        <h3>Communication Protocol</h3>
+                        <form id="comm-protocol-form">
+                            <div class="form-group">
+                                <label>Select Primary Communication Protocol:</label>
+                                <div class="protocol-selector">
+                                    <label>
+                                        <input type="radio" name="protocol" value="usb"> 
+                                        <i class="fa fa-usb"></i> USB
+                                    </label>
+                                    <label>
+                                        <input type="radio" name="protocol" value="wifi"> 
+                                        <i class="fa fa-wifi"></i> WiFi
+                                    </label>
+                                    <label>
+                                        <input type="radio" name="protocol" value="ethernet"> 
+                                        <i class="fa fa-network-wired"></i> Ethernet
+                                    </label>
+                                    <label>
+                                        <input type="radio" name="protocol" value="rs485"> 
+                                        <i class="fa fa-exchange-alt"></i> RS-485
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-success">Save Protocol</button>
+                                <button type="button" id="check-communication" class="btn btn-primary">Check Status</button>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="comm-card">
+                        <h3>Communication Status</h3>
+                        <div class="comm-status">
+                            <p><strong>USB:</strong> <span id="usb-status">Unknown</span></p>
+                            <p><strong>WiFi:</strong> <span id="wifi-comm-status">Unknown</span></p>
+                            <p><strong>Ethernet:</strong> <span id="eth-comm-status">Unknown</span></p>
+                            <p><strong>RS-485:</strong> <span id="rs485-status">Unknown</span></p>
+                            <p><strong>I2C Bus:</strong> <span id="i2c-comm-status">Unknown</span></p>
+                            <p><strong>Active Protocol:</strong> <span id="active-comm-protocol">Unknown</span></p>
+                        </div>
+                    </div>
+                    
+                    <div class="comm-card">
+                        <h3>I2C Device Scanner</h3>
+                        <button id="scan-i2c" class="btn btn-primary">Scan I2C Bus</button>
+                        <div id="i2c-devices" class="i2c-devices-list">
+                            <p>Click Scan to detect connected I2C devices</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Protocol-specific settings container will be added here -->
+                    <div id="protocol-config-container" class="comm-card protocol-config">
+                        <h3>Protocol Configuration</h3>
+                        <p>Select a protocol to view and modify its settings</p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Network Section -->
+            <section id="network">
+                <h2>Network Configuration</h2>
+                
+                <div class="network-grid">
+                    <!-- Current Status -->
+                    <div class="network-card">
+                        <h3>Connection Status</h3>
+                        <div class="network-status-grid">
+                            <div class="status-item">
+                                <strong>Connection Type:</strong>
+                                <span id="connection-type"><span class="badge badge-secondary">Checking...</span></span>
+                            </div>
+                            <div class="status-item">
+                                <strong>IP Configuration:</strong>
+                                <span id="dhcp-status"><span class="badge badge-secondary">Checking...</span></span>
+                            </div>
+                        </div>
+                        
+                        <div class="network-status-panels">
+                            <div id="network-eth-status">
+                                <div class="status-card loading">
+                                    <h4>Checking Ethernet Status...</h4>
+                                </div>
+                            </div>
+                            
+                            <div id="network-wifi-status">
+                                <div class="status-card loading">
+                                    <h4>Checking WiFi Status...</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- WiFi Connection -->
+                    <div class="network-card">
+                        <h3>WiFi Connection</h3>
+                        <form id="wifi-connect-form">
+                            <div class="form-group">
+                                <label for="wifi-ssid">WiFi Network Name (SSID)</label>
+                                <input type="text" id="wifi-ssid" placeholder="Enter WiFi network name">
+                            </div>
+                            <div class="form-group">
+                                <label for="wifi-password">WiFi Password</label>
+                                <input type="password" id="wifi-password" placeholder="Enter WiFi password">
+                            </div>
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-primary">Connect to WiFi</button>
+                            </div>
+                            <div class="form-note">
+                                <p>Note: The device will disconnect from the current network when connecting to a new WiFi network.</p>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- Network Settings -->
+                    <div class="network-card">
+                        <h3>Network Settings</h3>
+                        <form id="network-settings-form">
+                            <div class="form-group">
+                                <label for="network-dhcp-mode">Use DHCP (Automatic IP)</label>
+                                <input type="checkbox" id="network-dhcp-mode" checked>
+                            </div>
+                            
+                            <div id="network-static-settings" style="display: none;">
+                                <div class="form-group">
+                                    <label for="network-ip">IP Address</label>
+                                    <input type="text" id="network-ip" placeholder="192.168.1.100">
+                                </div>
+                                <div class="form-group">
+                                    <label for="network-gateway">Gateway</label>
+                                    <input type="text" id="network-gateway" placeholder="192.168.1.1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="network-subnet">Subnet Mask</label>
+                                    <input type="text" id="network-subnet" placeholder="255.255.255.0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="network-dns1">Primary DNS</label>
+                                    <input type="text" id="network-dns1" placeholder="8.8.8.8">
+                                </div>
+                                <div class="form-group">
+                                    <label for="network-dns2">Secondary DNS</label>
+                                    <input type="text" id="network-dns2" placeholder="8.8.4.4">
+                                </div>
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-success">Save Network Settings</button>
+                                <button type="button" id="refresh-network" class="btn btn-secondary">Refresh Status</button>
+                            </div>
+                            
+                            <div class="form-note">
+                                <p>Note: Saving network settings will restart the device. If you change the IP address, you'll need to reconnect using the new address.</p>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Settings Section -->
+            <section id="settings">
+                <h2>Settings</h2>
+                <form id="settings-form">
+                    <div class="settings-card">
+                        <h3>General Settings</h3>
+                        <div class="form-group">
+                            <label for="device-name-setting">Device Name</label>
+                            <input type="text" id="device-name-setting" value="KC868-A16">
+                        </div>
+                        <div class="form-group">
+                            <label for="debug-mode">Debug Mode</label>
+                            <input type="checkbox" id="debug-mode">
+                        </div>
+                    </div>
+                    
+                    <div class="settings-card">
+                        <h3>Network Settings</h3>
+                        <div class="form-group">
+                            <label for="wifi-ssid">WiFi SSID</label>
+                            <input type="text" id="wifi-ssid" placeholder="WiFi network name">
+                        </div>
+                        <div class="form-group">
+                            <label for="wifi-password">WiFi Password</label>
+                            <input type="password" id="wifi-password" placeholder="WiFi password">
+                        </div>
+                        <div class="form-group">
+                            <label for="dhcp-mode">Use DHCP</label>
+                            <input type="checkbox" id="dhcp-mode" checked>
+                        </div>
+                        <div id="static-ip-settings" style="display: none;">
+                            <div class="form-group">
+                                <label for="ip-address">IP Address</label>
+                                <input type="text" id="ip-address" placeholder="192.168.1.100">
+                            </div>
+                            <div class="form-group">
+                                <label for="gateway">Gateway</label>
+                                <input type="text" id="gateway" placeholder="192.168.1.1">
+                            </div>
+                            <div class="form-group">
+                                <label for="subnet">Subnet Mask</label>
+                                <input type="text" id="subnet" placeholder="255.255.255.0">
+                            </div>
+                            <div class="form-group">
+                                <label for="dns1">Primary DNS</label>
+                                <input type="text" id="dns1" placeholder="8.8.8.8">
+                            </div>
+                            <div class="form-group">
+                                <label for="dns2">Secondary DNS</label>
+                                <input type="text" id="dns2" placeholder="8.8.4.4">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-card">
+                        <h3>Date and Time Settings</h3>
+                        <div class="form-group">
+                            <label for="use-browser-time">Set Time from Browser</label>
+                            <button id="set-browser-time" class="btn btn-primary">Set Current Time</button>
+                        </div>
+                        <div class="form-group">
+                            <label for="manual-datetime">Manual Date/Time Setting</label>
+                            <input type="datetime-local" id="manual-datetime">
+                            <button id="set-manual-time" class="btn btn-primary">Set Manual Time</button>
+                        </div>
+                        <div class="form-group">
+                            <label for="use-ntp">Sync from NTP Server</label>
+                            <button id="sync-ntp" class="btn btn-primary">Sync NTP Time</button>
+                        </div>
+                        <div id="rtc-status">
+                            <p><strong>RTC Status:</strong> <span id="rtc-available">Unknown</span></p>
+                            <p><strong>Current Device Time:</strong> <span id="device-time">Unknown</span></p>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-actions">
+                        <button type="submit" class="btn btn-success">Save Settings</button>
+                        <button type="button" id="reset-settings" class="btn btn-danger">Reset to Default</button>
+                    </div>
+                </form>
+            </section>
+            
+            <!-- Diagnostics Section -->
+            <section id="diagnostics">
+                <h2>System Diagnostics</h2>
+                <div class="diagnostics-grid">
+                    <div class="diagnostics-card">
+                        <h3>System Information</h3>
+                        <div class="system-diagnostics">
+                            <p><strong>CPU Frequency:</strong> <span id="cpu-freq">240</span> MHz</p>
+                            <p><strong>Free Heap:</strong> <span id="free-heap">0</span> bytes</p>
+                            <p><strong>I2C Error Count:</strong> <span id="i2c-errors">0</span></p>
+                            <p><strong>Last Error:</strong> <span id="last-error">None</span></p>
+                            <p><strong>Firmware Version:</strong> <span id="firmware-version">Unknown</span></p>
+                        </div>
+                    </div>
+                    
+                    <div class="diagnostics-card">
+                        <h3>Connection Test</h3>
+                        <div class="connection-test">
+                            <p><strong>I2C Devices:</strong> <span id="i2c-status">Unknown</span></p>
+                            <p><strong>WiFi Signal:</strong> <span id="wifi-signal">Unknown</span></p>
+                            <p><strong>Internet:</strong> <span id="internet-status">Unknown</span></p>
+                            <button id="run-diagnostics" class="btn btn-primary">Run Diagnostics</button>
+                        </div>
+                    </div>
+                    
+                    <div class="diagnostics-card">
+                        <h3>Debug Console</h3>
+                        <div class="debug-console">
+                            <div id="debug-output" class="console-output"></div>
+                            <div class="console-input">
+                                <input type="text" id="command-input" placeholder="Enter command...">
+                                <button id="send-command" class="btn btn-secondary">Send</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="diagnostics-card">
+                        <h3>Firmware Update</h3>
+                        <div class="firmware-update">
+                            <p><strong>Current Version:</strong> <span id="firmware-version-display">Unknown</span></p>
+                            <form id="firmware-form" enctype="multipart/form-data">
+                                <div class="form-group">
+                                    <label for="firmware-file">Firmware File</label>
+                                    <input type="file" id="firmware-file">
+                                </div>
+                                <button type="submit" class="btn btn-warning">Update Firmware</button>
+                            </form>
+                            <div id="update-progress" class="progress-bar">
+                                <div class="progress-fill"></div>
+                                <span class="progress-text">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <footer>
+            <p>KC868-A16 Smart Home Controller</p>
+            <p>© 2025 - <span id="current-year">2025</span></p>
+        </footer>
+    </div>
+    
+    <div id="toast" class="toast"></div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="script.js"></script>
+
+    <style>
+    /* Network section styles */
+    .network-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+    }
+    
+    .network-card {
+        background-color: white;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        padding: 15px;
+    }
+    
+    .network-status-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    
+    .status-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .network-status-panels {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .status-card {
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+    }
+    
+    .status-card.success {
+        background-color: #e8f5e9;
+        border-left: 4px solid #4CAF50;
+    }
+    
+    .status-card.warning {
+        background-color: #fff3e0;
+        border-left: 4px solid #FF9800;
+    }
+    
+    .status-card.error {
+        background-color: #ffebee;
+        border-left: 4px solid #F44336;
+    }
+    
+    .status-card.loading {
+        background-color: #e3f2fd;
+        border-left: 4px solid #2196F3;
+    }
+    
+    .status-card h4 {
+        margin-top: 0;
+        margin-bottom: 10px;
+    }
+    
+    .status-card p {
+        margin: 5px 0;
+    }
+    
+    .form-note {
+        margin-top: 15px;
+        padding: 10px;
+        background-color: #f5f5f5;
+        border-radius: 5px;
+        font-size: 0.9em;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 3px 7px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        font-weight: bold;
+        color: white;
+    }
+    
+    .badge-success {
+        background-color: #4CAF50;
+    }
+    
+    .badge-primary {
+        background-color: #2196F3;
+    }
+    
+    .badge-warning {
+        background-color: #FF9800;
+    }
+    
+    .badge-danger {
+        background-color: #F44336;
+    }
+    
+    .badge-info {
+        background-color: #00BCD4;
+    }
+    
+    .badge-secondary {
+        background-color: #757575;
+    }
+    
+    /* Enhanced dashboard network info */
+    .dashboard-network-info {
+        background-color: #f9f9f9;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 10px;
+    }
+    
+    @media (max-width: 768px) {
+        .network-status-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    </style>
+</body>
+</html>
