@@ -1,0 +1,1415 @@
+/* Basic styles for the application */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f5f5f5;
+    min-height: 100vh;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+        "header header"
+        "sidebar main"
+        "footer footer";
+    min-height: 100vh;
+}
+
+header {
+    grid-area: header;
+    background-color: #1a2b42;
+    color: white;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+nav {
+    grid-area: sidebar;
+    background-color: #222c3c;
+    color: white;
+    padding: 20px 0;
+    box-shadow: 1px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+main {
+    grid-area: main;
+    padding: 20px;
+    overflow-y: auto;
+    position: relative;
+}
+
+/* Very important: Fix for section display */
+section {
+    display: none !important;
+    padding: 20px 0;
+}
+
+section.active {
+    display: block !important;
+}
+
+footer {
+    grid-area: footer;
+    background-color: #1a2b42;
+    color: white;
+    padding: 10px 20px;
+    text-align: center;
+    font-size: 0.9em;
+}
+
+/* Header styles */
+h1 {
+    font-size: 1.8rem;
+    margin: 0;
+}
+
+.system-status {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #ccc;
+}
+
+.connected {
+    background-color: #4CAF50;
+}
+
+.disconnected {
+    background-color: #F44336;
+}
+
+.status-time {
+    font-weight: bold;
+    margin-left: 15px;
+}
+
+/* Navigation styles */
+nav ul {
+    list-style: none;
+    padding: 0;
+}
+
+nav ul li {
+    padding: 0;
+}
+
+nav ul li a {
+    display: block;
+    padding: 10px 20px;
+    text-decoration: none;
+    color: #f5f5f5;
+    transition: background-color 0.2s ease;
+}
+
+nav ul li a:hover {
+    background-color: #344055;
+}
+
+nav ul li a.active {
+    background-color: #4CAF50;
+    color: white;
+}
+
+/* Dashboard styles */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-gap: 20px;
+}
+
+.dashboard-card {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+}
+
+.dashboard-card h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #1a2b42;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.system-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+/* Button styles */
+.btn {
+    background-color: #4CAF50;
+    border: none;
+    color: white;
+    padding: 8px 15px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 14px;
+    margin: 4px 2px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.btn-primary {
+    background-color: #2196F3;
+}
+
+.btn-secondary {
+    background-color: #607D8B;
+}
+
+.btn-success {
+    background-color: #4CAF50;
+}
+
+.btn-danger {
+    background-color: #F44336;
+}
+
+.btn-warning {
+    background-color: #FF9800;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+/* Quick actions */
+.quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-gap: 10px;
+}
+
+/* Status grid */
+.status-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.input-item {
+    background-color: #eee;
+    padding: 6px 10px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.input-state {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #ccc;
+}
+
+.input-state.active {
+    background-color: #4CAF50;
+}
+
+/* Relay control styles */
+.relays-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.relay-card {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+}
+
+.relay-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.relay-controls {
+    display: flex;
+    justify-content: center;
+    margin: 15px 0;
+}
+
+.relay-status {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    font-size: 0.9em;
+}
+
+.status-indicator {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background-color: #ccc;
+}
+
+.status-indicator.on {
+    background-color: #4CAF50;
+}
+
+.control-options {
+    background-color: white;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.select-options {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+/* Switch toggle styles */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #4CAF50;
+}
+
+input:focus + .slider {
+    box-shadow: 0 0 1px #4CAF50;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+/* Additional styles for input-based triggers */
+#input-trigger-section,
+#time-trigger-section {
+    background-color: #f9f9f9;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+}
+
+#schedule-input-logic {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* Trigger type labels */
+.trigger-type {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.trigger-type-0 {
+    background-color: #2196F3; /* Blue for time-based */
+}
+
+.trigger-type-1 {
+    background-color: #FF9800; /* Orange for input-based */
+}
+
+.trigger-type-2 {
+    background-color: #9C27B0; /* Purple for combined */
+}
+
+/* Input selection styling */
+.input-container {
+    margin-bottom: 8px;
+    padding: 5px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+}
+
+.input-state-select {
+    margin-left: 5px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+}
+
+/* Visual representation styles */
+.visual-panel {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    margin-top: 20px;
+}
+
+.output-visual-grid, .input-visual-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.visual-item {
+    text-align: center;
+}
+
+.visual-box {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 5px;
+    margin: 0 auto 5px;
+    font-weight: bold;
+}
+
+.visual-box.off {
+    background-color: #F44336;
+    color: white;
+}
+
+.visual-box.on {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.visual-label {
+    font-size: 0.8em;
+}
+
+/* Improved checkbox layout */
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* Analog inputs styles */
+.analog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.analog-card {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+}
+
+.analog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.analog-header h4 {
+    margin: 0;
+}
+
+.analog-value {
+    font-weight: bold;
+}
+
+.analog-percentage {
+    text-align: right;
+    font-size: 0.9em;
+    margin-bottom: 5px;
+}
+
+.analog-progress {
+    height: 20px;
+    background-color: #eee;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.analog-fill {
+    height: 100%;
+    background-color: #2196F3;
+    border-radius: 10px;
+    width: 0;
+    transition: width 0.3s ease;
+}
+
+.analog-visual-container {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    margin-top: 20px;
+}
+
+.analog-visual-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.analog-visual-item {
+    text-align: center;
+}
+
+.analog-bar-container {
+    width: 50px;
+    height: 150px;
+    background-color: #eee;
+    border-radius: 5px;
+    margin: 0 auto 10px;
+    position: relative;
+    overflow: hidden;
+}
+
+.analog-bar {
+    width: 100%;
+    background-color: #2196F3;
+    position: absolute;
+    bottom: 0;
+    transition: height 0.3s ease;
+}
+
+.analog-bar-value {
+    position: absolute;
+    top: 5px;
+    left: 0;
+    right: 0;
+    font-size: 0.8em;
+    font-weight: bold;
+}
+
+.analog-bar-label {
+    position: absolute;
+    bottom: 5px;
+    left: 0;
+    right: 0;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
+}
+
+.analog-chart-container {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    margin-top: 20px;
+    height: 300px;
+}
+
+/* Data table styles */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+.data-table th {
+    background-color: #1a2b42;
+    color: white;
+    text-align: left;
+    padding: 10px;
+}
+
+.data-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #ddd;
+}
+
+.data-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.data-table tr:hover {
+    background-color: #f1f1f1;
+}
+
+.action-btns {
+    display: flex;
+    gap: 5px;
+}
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: white;
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: 5px;
+    width: 80%;
+    max-width: 600px;
+    position: relative;
+}
+
+.close-modal {
+    position: absolute;
+    right: 20px;
+    top: 15px;
+    font-size: 24px;
+    cursor: pointer;
+}
+
+/* Form styles */
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group input[type="time"],
+.form-group input[type="datetime-local"],
+.form-group select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.days-selector {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* Communication styles */
+.comm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.comm-card {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+}
+
+.comm-card h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #1a2b42;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.protocol-selector {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.protocol-selector label {
+    display: block;
+    padding: 10px;
+    background-color: #f5f5f5;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: center;
+}
+
+.protocol-selector label:hover {
+    background-color: #e0e0e0;
+}
+
+.protocol-selector input[type="radio"]:checked + label {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.protocol-selector input[type="radio"] {
+    display: none;
+}
+
+.comm-status {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.i2c-device-list {
+    list-style: none;
+    margin-top: 10px;
+}
+
+.i2c-device-item {
+    background-color: #f5f5f5;
+    padding: 8px;
+    margin-bottom: 5px;
+    border-radius: 4px;
+}
+
+/* Protocol configuration styles */
+.protocol-form {
+    margin-top: 15px;
+}
+
+.status-card {
+    background-color: #f5f5f5;
+    padding: 10px;
+    margin-top: 15px;
+    border-radius: 4px;
+}
+
+/* Settings styles */
+.settings-card {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.settings-card h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #1a2b42;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.settings-actions {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Diagnostics styles */
+.diagnostics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.diagnostics-card {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+}
+
+.diagnostics-card h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #1a2b42;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.debug-console {
+    margin-top: 15px;
+}
+
+.console-output {
+    height: 200px;
+    background-color: #222;
+    color: #0f0;
+    padding: 10px;
+    font-family: monospace;
+    overflow-y: auto;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+
+.console-input {
+    display: flex;
+    gap: 10px;
+}
+
+#command-input {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.progress-bar {
+    display: none;
+    height: 20px;
+    background-color: #eee;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 15px;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: #2196F3;
+    width: 0;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    position: absolute;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: white;
+    font-weight: bold;
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
+    line-height: 20px;
+}
+
+/* Toast notification */
+.toast {
+    visibility: hidden;
+    min-width: 250px;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    text-align: center;
+    border-radius: 4px;
+    padding: 16px;
+    position: fixed;
+    z-index: 2000;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.9em;
+}
+
+.toast.show {
+    visibility: visible;
+    animation: fadein 0.5s, fadeout 0.5s 2.5s;
+}
+
+@keyframes fadein {
+    from {bottom: 0; opacity: 0;}
+    to {bottom: 30px; opacity: 1;}
+}
+
+@keyframes fadeout {
+    from {bottom: 30px; opacity: 1;}
+    to {bottom: 0; opacity: 0;}
+}
+
+/* WebSocket connection status indicator */
+.connection-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.connection-status.connected {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.connection-status.connecting {
+    background-color: #FF9800;
+    color: white;
+    animation: pulse 1.5s infinite;
+}
+
+.connection-status.disconnected {
+    background-color: #F44336;
+    color: white;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+}
+
+.data-refresh-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #4CAF50;
+    margin-left: 5px;
+    animation: fade-out 2s forwards;
+}
+
+@keyframes fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+/* Mobile-friendly modal improvements */
+@media (max-width: 768px) {
+    .modal-content {
+        margin: 5% auto;
+        padding: 15px;
+        width: 95%;
+        max-height: 85vh;
+        overflow-y: auto;
+    }
+    
+    /* Make form elements easier to tap on mobile */
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group input[type="time"],
+    .form-group input[type="datetime-local"],
+    .form-group select {
+        padding: 12px 8px;
+        font-size: 16px; /* Prevents iOS zoom on focus */
+    }
+    
+    /* Ensure form actions (buttons) are always visible at bottom */
+    .form-actions {
+        position: sticky;
+        bottom: 0;
+        background-color: white;
+        padding: 15px 0 5px 0;
+        margin-top: 15px;
+        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        z-index: 10;
+    }
+    
+    /* Make buttons bigger for touch interaction */
+    .form-actions .btn {
+        padding: 12px 20px;
+        font-size: 16px;
+    }
+    
+    /* Improve modal layout for touchscreens */
+    #schedule-modal .close-modal {
+        font-size: 30px;
+        top: 10px;
+        right: 15px;
+    }
+    
+    /* Adjust time and input sections to be full-width on mobile */
+    #schedule-modal.combined-view #time-trigger-section,
+    #schedule-modal.combined-view #input-trigger-section {
+        width: 100%;
+        display: block;
+        margin-right: 0;
+    }
+    
+    /* Adjust days selector to be more touch-friendly */
+    .days-selector {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+    }
+    
+    .days-selector label {
+        padding: 8px 0;
+    }
+    
+    /* Adjust checkbox grid for better spacing */
+    .checkbox-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    
+    /* Make input containers more tap-friendly */
+    .input-container {
+        padding: 8px;
+        margin-bottom: 10px;
+    }
+    
+    /* Add some spacing to input state selects */
+    .input-state-select {
+        margin-top: 5px;
+        padding: 8px;
+        width: 100%;
+    }
+}
+
+/* Fix for non-scrollable modal on iOS */
+.modal {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Make modal content scrollable but maintain fixed position */
+.modal-content {
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* Additional fix for schedule modal specifically */
+#schedule-modal .modal-content {
+    padding-bottom: 80px; /* Extra padding to ensure content doesn't get hidden behind sticky buttons */
+}
+
+/* Improved focus visibility for accessibility */
+.form-group input:focus,
+.form-group select:focus {
+    outline: 2px solid #2196F3;
+    outline-offset: 2px;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .container {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "header"
+            "sidebar"
+            "main"
+            "footer";
+    }
+
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .system-status {
+        margin-top: 10px;
+        flex-wrap: wrap;
+    }
+
+    nav ul li {
+        display: inline-block;
+        width: 50%;
+    }
+
+    nav ul li a {
+        text-align: center;
+    }
+
+    .dashboard-grid, .analog-grid, .diagnostics-grid, .comm-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .relays-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+
+    .checkbox-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .visual-panel {
+        overflow-x: auto;
+    }
+
+    .output-visual-grid, .input-visual-grid {
+        min-width: 600px;
+    }
+
+    .days-selector {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* When schedule modal is in combined view mode */
+#schedule-modal.combined-view #time-trigger-section,
+#schedule-modal.combined-view #input-trigger-section {
+    width: 48%;
+    display: inline-block;
+    vertical-align: top;
+}
+
+#schedule-modal.combined-view #time-trigger-section {
+    margin-right: 2%;
+}
+
+/* Add to your style.css file */
+.priority-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.high-priority {
+    background-color: #F44336; /* Red */
+}
+
+.medium-priority {
+    background-color: #FF9800; /* Orange */
+}
+
+.low-priority {
+    background-color: #2196F3; /* Blue */
+}
+
+.no-priority {
+    background-color: #9E9E9E; /* Grey */
+}
+
+.priority-description {
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border: 1px solid #ddd;
+}
+
+.interrupts-container {
+    margin-top: 15px;
+}
+
+/* Ensure the navigation includes the new section */
+nav ul li a[data-section="input-interrupts"] {
+    /* Same styling as your other navigation items */
+}
+
+/* Add these styles to style.css for the trigger type badges */
+.trigger-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.trigger-rising {
+    background-color: #2196F3; /* Blue */
+}
+
+.trigger-falling {
+    background-color: #673AB7; /* Deep Purple */
+}
+
+.trigger-change {
+    background-color: #009688; /* Teal */
+}
+
+.trigger-high {
+    background-color: #4CAF50; /* Green */
+}
+
+.trigger-low {
+    background-color: #FF5722; /* Deep Orange */
+}
+
+.trigger-description {
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border: 1px solid #ddd;
+}
+
+/* Add to your style.css file */
+.priority-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.high-priority {
+    background-color: #F44336; /* Red */
+}
+
+.medium-priority {
+    background-color: #FF9800; /* Orange */
+}
+
+.low-priority {
+    background-color: #2196F3; /* Blue */
+}
+
+.no-priority {
+    background-color: #9E9E9E; /* Grey */
+}
+
+.priority-description {
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border: 1px solid #ddd;
+}
+
+.interrupts-container {
+    margin-top: 15px;
+}
+
+/* Ensure the navigation includes the new section */
+nav ul li a[data-section="input-interrupts"] {
+    /* Same styling as your other navigation items */
+}
+
+/* Add these styles to style.css for the trigger type badges */
+.trigger-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.trigger-rising {
+    background-color: #2196F3; /* Blue */
+}
+
+.trigger-falling {
+    background-color: #673AB7; /* Deep Purple */
+}
+
+.trigger-change {
+    background-color: #009688; /* Teal */
+}
+
+.trigger-high {
+    background-color: #4CAF50; /* Green */
+}
+
+.trigger-low {
+    background-color: #FF5722; /* Deep Orange */
+}
+
+.trigger-description {
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border: 1px solid #ddd;
+}
+
+/* Add these styles to your style.css file */
+#input-condition-sections {
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 15px;
+    margin-top: 15px;
+    background-color: #f9f9f9;
+}
+
+.input-condition-section {
+    background-color: white;
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.input-condition-section:first-child {
+    border-left: 3px solid #4CAF50;
+}
+
+.input-condition-section:last-child {
+    border-left: 3px solid #F44336;
+    margin-bottom: 0;
+}
+
+.target-high {
+    display: block;
+    padding: 3px;
+    margin: 2px 0;
+    background-color: #e8f5e9;
+    border-left: 3px solid #4CAF50;
+}
+
+.target-low {
+    display: block;
+    padding: 3px;
+    margin: 2px 0;
+    background-color: #ffebee;
+    border-left: 3px solid #F44336;
+
+}
+
+/* Add to style.css */
+/* HT Sensors Styles */
+.sensors-container {
+    margin-top: 20px;
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+}
+
+.sensors-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.sensor-card {
+    background-color: #f5f5f5;
+    border-radius: 5px;
+    padding: 15px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.sensor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.sensor-header h4 {
+    margin: 0;
+    color: #1a2b42;
+}
+
+.sensor-type {
+    font-size: 0.8em;
+    padding: 2px 5px;
+    background-color: #e0e0e0;
+    border-radius: 3px;
+    color: #333;
+}
+
+.sensor-value {
+    font-size: 1.5em;
+    text-align: center;
+    padding: 10px;
+    font-weight: bold;
+    background-color: #e0e0e0;
+    border-radius: 5px;
+}
+
+.sensor-value.active {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.sensor-values {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.sensor-temp, .sensor-humidity {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 5px;
+    background-color: #e0e0e0;
+    border-radius: 5px;
+}
+
+.sensor-temp {
+    background-color: #ffebee;
+    color: #d32f2f;
+}
+
+.sensor-humidity {
+    background-color: #e3f2fd;
+    color: #1976d2;
+}
+
+.sensor-temp i, .sensor-humidity i {
+    font-size: 1.5em;
+    margin-bottom: 5px;
+}
+
+.sensor-temp span, .sensor-humidity span {
+    font-weight: bold;
+}
+
+.sensor-config-info {
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border: 1px solid #ddd;
+    font-size: 0.9em;
+
+}
