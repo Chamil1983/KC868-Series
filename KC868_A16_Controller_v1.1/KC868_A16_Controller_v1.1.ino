@@ -301,7 +301,7 @@ struct TimeSchedule {
 
 TimeSchedule schedules[MAX_SCHEDULES];
 
-// Analog trigger structure
+// Update the AnalogTrigger structure to support combined triggers
 struct AnalogTrigger {
     bool enabled;
     uint8_t analogInput;    // 0-3 (A1-A4)
@@ -309,8 +309,20 @@ struct AnalogTrigger {
     uint8_t condition;      // 0=Above, 1=Below, 2=Equal
     uint8_t action;         // 0=OFF, 1=ON, 2=TOGGLE
     uint8_t targetType;     // 0=Output, 1=Multiple outputs
-    uint16_t targetId;       // Output number (0-15) or bitmask
+    uint16_t targetId;      // Output number (0-15) or bitmask
     char name[32];          // Name/description of trigger
+
+    // New fields for combined triggers
+    bool combinedMode;      // Enable combined mode with digital inputs
+    uint16_t inputMask;     // Bit mask for digital inputs (bits 0-15 for digital inputs, 16-18 for HT1-HT3)
+    uint16_t inputStates;   // Required state for each input (0=LOW, 1=HIGH)
+    uint8_t logic;          // 0=AND (all conditions must be met), 1=OR (any condition can trigger)
+
+    // Support for HT analog sensors
+    uint8_t htSensorIndex;  // 0-2 for HT1-HT3
+    uint8_t sensorTriggerType; // 0=Temperature, 1=Humidity
+    uint8_t sensorCondition;   // 0=Above, 1=Below, 2=Equal
+    float sensorThreshold;     // Temperature or humidity threshold value
 };
 
 AnalogTrigger analogTriggers[MAX_ANALOG_TRIGGERS];
@@ -3473,6 +3485,7 @@ void handleSchedules() {
 }
 
 // Update schedule handler
+// Handle POST request to update a schedule
 void handleUpdateSchedule() {
     String response = "{\"status\":\"error\",\"message\":\"Invalid request\"}";
 
@@ -3506,8 +3519,19 @@ void handleUpdateSchedule() {
                 schedules[id].action = scheduleJson["action"] | 0;
                 schedules[id].targetType = scheduleJson["targetType"] | 0;
                 schedules[id].targetId = scheduleJson["targetId"] | 0;
+                schedules[id].targetIdLow = scheduleJson["targetIdLow"] | 0;  // Added for dual condition support
 
-                saveConfiguration();
+                // Sensor-based fields (for type 3 and 4)
+                if (schedules[id].triggerType == 3 || schedules[id].triggerType == 4) {
+                    schedules[id].sensorIndex = scheduleJson["sensorIndex"] | 0;
+                    schedules[id].sensorTriggerType = scheduleJson["sensorTriggerType"] | 0;
+                    schedules[id].sensorCondition = scheduleJson["sensorCondition"] | 0;
+                    schedules[id].sensorThreshold = scheduleJson["sensorThreshold"] | 25.0f;
+                }
+
+                // Save schedules to EEPROM
+                saveSchedulesToEEPROM();
+
                 response = "{\"status\":\"success\"}";
             }
         }
@@ -3518,7 +3542,7 @@ void handleUpdateSchedule() {
 
             if (id >= 0 && id < MAX_SCHEDULES) {
                 schedules[id].enabled = enabled;
-                saveConfiguration();
+                saveSchedulesToEEPROM();
                 response = "{\"status\":\"success\"}";
             }
         }
@@ -3540,15 +3564,49 @@ void handleUpdateSchedule() {
                 schedules[id].action = 0;
                 schedules[id].targetType = 0;
                 schedules[id].targetId = 0;
+                schedules[id].targetIdLow = 0;
+                schedules[id].sensorIndex = 0;
+                schedules[id].sensorTriggerType = 0;
+                schedules[id].sensorCondition = 0;
+                schedules[id].sensorThreshold = 25.0f;
                 snprintf(schedules[id].name, 32, "Schedule %d", id + 1);
 
-                saveConfiguration();
+                saveSchedulesToEEPROM();
                 response = "{\"status\":\"success\"}";
             }
         }
     }
 
     server.send(200, "application/json", response);
+}
+
+// Helper function to save schedules to EEPROM
+void saveSchedulesToEEPROM() {
+    // Calculate required space based on MAX_SCHEDULES
+    size_t requiredSpace = MAX_SCHEDULES * sizeof(TimeSchedule);
+
+    // Create a buffer for serializing schedules
+    char* buffer = new char[requiredSpace];
+    if (!buffer) {
+        debugPrintln("Failed to allocate memory for saving schedules");
+        return;
+    }
+
+    // Copy schedules to buffer
+    memcpy(buffer, schedules, requiredSpace);
+
+    // Write to EEPROM
+    for (size_t i = 0; i < requiredSpace; i++) {
+        EEPROM.write(EEPROM_SCHEDULE_ADDR + i, buffer[i]);
+    }
+
+    // Free memory
+    delete[] buffer;
+
+    // Commit changes to EEPROM
+    EEPROM.commit();
+
+    debugPrintln("Schedules saved to EEPROM");
 }
 
 
@@ -3585,7 +3643,7 @@ void handleAnalogTriggers() {
     server.send(200, "application/json", response);
 }
 
-// Update analog triggers handler
+// Update analog triggers handler with combined trigger support
 void handleUpdateAnalogTriggers() {
     String response = "{\"status\":\"error\",\"message\":\"Invalid request\"}";
 
@@ -3609,6 +3667,22 @@ void handleUpdateAnalogTriggers() {
                 analogTriggers[id].action = triggerJson["action"];
                 analogTriggers[id].targetType = triggerJson["targetType"];
                 analogTriggers[id].targetId = triggerJson["targetId"];
+
+                // New combined trigger fields
+                analogTriggers[id].combinedMode = triggerJson["combinedMode"] | false;
+                if (analogTriggers[id].combinedMode) {
+                    analogTriggers[id].inputMask = triggerJson["inputMask"] | 0;
+                    analogTriggers[id].inputStates = triggerJson["inputStates"] | 0;
+                    analogTriggers[id].logic = triggerJson["logic"] | 0;
+                }
+
+                // HT sensor fields for temperature/humidity triggering
+                if (triggerJson.containsKey("htSensorIndex")) {
+                    analogTriggers[id].htSensorIndex = triggerJson["htSensorIndex"];
+                    analogTriggers[id].sensorTriggerType = triggerJson["sensorTriggerType"];
+                    analogTriggers[id].sensorCondition = triggerJson["sensorCondition"];
+                    analogTriggers[id].sensorThreshold = triggerJson["sensorThreshold"];
+                }
 
                 saveConfiguration();
                 response = "{\"status\":\"success\"}";
@@ -3639,6 +3713,17 @@ void handleUpdateAnalogTriggers() {
                 analogTriggers[id].action = 0;
                 analogTriggers[id].targetType = 0;
                 analogTriggers[id].targetId = 0;
+                // Reset combined mode fields
+                analogTriggers[id].combinedMode = false;
+                analogTriggers[id].inputMask = 0;
+                analogTriggers[id].inputStates = 0;
+                analogTriggers[id].logic = 0;
+                // Reset HT sensor fields
+                analogTriggers[id].htSensorIndex = 0;
+                analogTriggers[id].sensorTriggerType = 0;
+                analogTriggers[id].sensorCondition = 0;
+                analogTriggers[id].sensorThreshold = 25.0;
+
                 snprintf(analogTriggers[id].name, 32, "Trigger %d", id + 1);
 
                 saveConfiguration();
@@ -4866,70 +4951,165 @@ void executeSchedule(int scheduleIndex) {
     broadcastUpdate();
 }
 
-// Check analog triggers against current values
+// Modified checkAnalogTriggers function to support combined triggers with digital inputs and HT sensors
 void checkAnalogTriggers() {
     for (int i = 0; i < MAX_ANALOG_TRIGGERS; i++) {
-        if (analogTriggers[i].enabled) {
-            uint8_t analogInput = analogTriggers[i].analogInput;
+        if (!analogTriggers[i].enabled) continue;
 
-            if (analogInput < 4) {
-                int value = analogValues[analogInput];
-                bool triggerConditionMet = false;
+        bool triggerConditionMet = false;
+
+        // Check for HT sensor based analog trigger
+        if (analogTriggers[i].analogInput >= 100) { // Special value for HT sensors (e.g., 100 = HT1 temp, 101 = HT1 humidity)
+            uint8_t sensorIndex = analogTriggers[i].htSensorIndex;
+
+            if (sensorIndex < 3 && htSensorConfig[sensorIndex].sensorType != SENSOR_TYPE_DIGITAL) {
+                float sensorValue;
+
+                // Get the appropriate sensor value based on type (temperature/humidity)
+                if (analogTriggers[i].sensorTriggerType == 0) { // Temperature
+                    sensorValue = htSensorConfig[sensorIndex].temperature;
+                }
+                else { // Humidity
+                    sensorValue = htSensorConfig[sensorIndex].humidity;
+                }
 
                 // Check condition
-                if (analogTriggers[i].condition == 0) {     // Above
-                    triggerConditionMet = (value > analogTriggers[i].threshold);
-                }
-                else if (analogTriggers[i].condition == 1) { // Below
-                    triggerConditionMet = (value < analogTriggers[i].threshold);
-                }
-                else if (analogTriggers[i].condition == 2) { // Equal (with some tolerance)
-                    triggerConditionMet = (abs(value - analogTriggers[i].threshold) < 50);
-                }
-
-                if (triggerConditionMet) {
-                    debugPrintln("Analog trigger activated: " + String(analogTriggers[i].name));
-
-                    // Perform the trigger action
-                    if (analogTriggers[i].targetType == 0) {
-                        // Single output
-                        uint8_t relay = analogTriggers[i].targetId;
-                        if (relay < 16) {
-                            if (analogTriggers[i].action == 0) {        // OFF
-                                outputStates[relay] = false;
-                            }
-                            else if (analogTriggers[i].action == 1) { // ON
-                                outputStates[relay] = true;
-                            }
-                            else if (analogTriggers[i].action == 2) { // TOGGLE
-                                outputStates[relay] = !outputStates[relay];
-                            }
-                        }
-                    }
-                    else if (analogTriggers[i].targetType == 1) {
-                        // Multiple outputs (using bitmask)
-                        for (int j = 0; j < 16; j++) {
-                            if (analogTriggers[i].targetId & (1 << j)) {
-                                if (analogTriggers[i].action == 0) {        // OFF
-                                    outputStates[j] = false;
-                                }
-                                else if (analogTriggers[i].action == 1) { // ON
-                                    outputStates[j] = true;
-                                }
-                                else if (analogTriggers[i].action == 2) { // TOGGLE
-                                    outputStates[j] = !outputStates[j];
-                                }
-                            }
-                        }
-                    }
-
-                    // Update outputs
-                    writeOutputs();
-
-                    // Broadcast update
-                    broadcastUpdate();
+                switch (analogTriggers[i].sensorCondition) {
+                case 0: // Above
+                    triggerConditionMet = (sensorValue > analogTriggers[i].sensorThreshold);
+                    break;
+                case 1: // Below
+                    triggerConditionMet = (sensorValue < analogTriggers[i].sensorThreshold);
+                    break;
+                case 2: // Equal (with tolerance)
+                    triggerConditionMet = (abs(sensorValue - analogTriggers[i].sensorThreshold) < 0.5);
+                    break;
                 }
             }
+        }
+        // Standard analog input check
+        else if (analogTriggers[i].analogInput < 4) {
+            int value = analogValues[analogTriggers[i].analogInput];
+
+            // Check condition
+            switch (analogTriggers[i].condition) {
+            case 0: // Above
+                triggerConditionMet = (value > analogTriggers[i].threshold);
+                break;
+            case 1: // Below
+                triggerConditionMet = (value < analogTriggers[i].threshold);
+                break;
+            case 2: // Equal (with tolerance)
+                triggerConditionMet = (abs(value - analogTriggers[i].threshold) < 50);
+                break;
+            }
+        }
+
+        // If this is a combined trigger, check digital inputs too
+        if (analogTriggers[i].combinedMode) {
+            bool inputConditionMet = false;
+
+            // Calculate current state of all inputs as a single 32-bit value
+            uint32_t currentInputState = 0;
+
+            // Add digital inputs (bits 0-15)
+            for (int j = 0; j < 16; j++) {
+                if (inputStates[j]) {
+                    currentInputState |= (1UL << j);
+                }
+            }
+
+            // Add direct inputs HT1-HT3 (bits 16-18)
+            for (int j = 0; j < 3; j++) {
+                if (directInputStates[j]) {
+                    currentInputState |= (1UL << (16 + j));
+                }
+            }
+
+            // Check inputs based on logic
+            if (analogTriggers[i].logic == 0) { // AND logic
+                inputConditionMet = true; // Start with true
+
+                for (int bitPos = 0; bitPos < 19; bitPos++) {
+                    uint32_t bitMask = 1UL << bitPos;
+
+                    // If this bit is part of our input mask, check its state
+                    if (analogTriggers[i].inputMask & bitMask) {
+                        bool desiredState = (analogTriggers[i].inputStates & bitMask) != 0;
+                        bool currentState = (currentInputState & bitMask) != 0;
+
+                        if (currentState != desiredState) {
+                            inputConditionMet = false;
+                            break; // Break early for AND logic if one condition fails
+                        }
+                    }
+                }
+            }
+            else { // OR logic
+                inputConditionMet = false; // Start with false
+
+                for (int bitPos = 0; bitPos < 19; bitPos++) {
+                    uint32_t bitMask = 1UL << bitPos;
+
+                    // If this bit is part of our input mask, check its state
+                    if (analogTriggers[i].inputMask & bitMask) {
+                        bool desiredState = (analogTriggers[i].inputStates & bitMask) != 0;
+                        bool currentState = (currentInputState & bitMask) != 0;
+
+                        if (currentState == desiredState) {
+                            inputConditionMet = true;
+                            break; // Break early for OR logic if one condition is true
+                        }
+                    }
+                }
+            }
+
+            // For combined mode, both analog and input conditions must be met
+            triggerConditionMet = triggerConditionMet && inputConditionMet;
+        }
+
+        // If all conditions are met, execute the action
+        if (triggerConditionMet) {
+            debugPrintln("Analog trigger activated: " + String(analogTriggers[i].name));
+
+            // Perform the trigger action
+            if (analogTriggers[i].targetType == 0) {
+                // Single output
+                uint8_t relay = analogTriggers[i].targetId;
+                if (relay < 16) {
+                    if (analogTriggers[i].action == 0) {        // OFF
+                        outputStates[relay] = false;
+                    }
+                    else if (analogTriggers[i].action == 1) { // ON
+                        outputStates[relay] = true;
+                    }
+                    else if (analogTriggers[i].action == 2) { // TOGGLE
+                        outputStates[relay] = !outputStates[relay];
+                    }
+                }
+            }
+            else if (analogTriggers[i].targetType == 1) {
+                // Multiple outputs (using bitmask)
+                for (int j = 0; j < 16; j++) {
+                    if (analogTriggers[i].targetId & (1 << j)) {
+                        if (analogTriggers[i].action == 0) {        // OFF
+                            outputStates[j] = false;
+                        }
+                        else if (analogTriggers[i].action == 1) { // ON
+                            outputStates[j] = true;
+                        }
+                        else if (analogTriggers[i].action == 2) { // TOGGLE
+                            outputStates[j] = !outputStates[j];
+                        }
+                    }
+                }
+            }
+
+            // Update outputs
+            writeOutputs();
+
+            // Broadcast update
+            broadcastUpdate();
         }
     }
 }
