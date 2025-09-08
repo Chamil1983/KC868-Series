@@ -9,26 +9,26 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>KC868-A16 Smart Home Controller</h1>
-            <div class="system-status">
-                <div class="status-indicator">
-                    <span class="indicator-label">WiFi:</span>
-                    <span id="wifi-status" class="indicator disconnected"><i class="fa fa-wifi"></i></span>
-                </div>
-                <div class="status-indicator">
-                    <span class="indicator-label">Ethernet:</span>
-                    <span id="eth-status" class="indicator disconnected"><i class="fa fa-network-wired"></i></span>
-                </div>
-                <div class="status-indicator">
-                    <span class="indicator-label">Protocol:</span>
-                    <span id="protocol-status" class="indicator">Unknown</span>
-                </div>
-                <div class="status-time">
-                    <span id="current-time">--:--:--</span>
-                </div>
-            </div>
-        </header>
+<header>
+    <h1>KC868-A16 Smart Home Controller</h1>
+    <div class="system-status">
+        <div class="status-indicator">
+            <span class="indicator-label">WiFi:</span>
+            <span id="wifi-status" class="indicator disconnected"><i class="fa fa-wifi"></i></span>
+        </div>
+        <div class="status-indicator">
+            <span class="indicator-label">Ethernet:</span>
+            <span id="eth-status" class="indicator disconnected"><i class="fa fa-network-wired"></i></span>
+        </div>
+        <div class="status-indicator">
+            <span class="indicator-label">Protocol:</span>
+            <span id="protocol-status" class="indicator">Unknown</span>
+        </div>
+        <div class="status-time">
+            <span id="current-time">--:--:--</span>
+        </div>
+    </div>
+</header>
         
         <nav>
             <ul>
@@ -388,6 +388,7 @@
                                     <option value="1">Input-based</option>
                                     <option value="2">Combined (Time + Input)</option>
                                     <option value="3">Sensor-based</option>
+                                    <option value="4">Combined (Digital + HT Sensor) </option>
                                 </select>
                             </div>
                             
@@ -473,6 +474,67 @@
                                     </ul>
                                 </div>
                             </div>
+
+                            <!-- Add a new section for Digital+HT Sensor Combined trigger type -->
+<div id="digital-ht-sensor-section" style="display:none;">
+    <h4>Digital Inputs Configuration</h4>
+    <div class="form-group">
+        <label>Select Digital Inputs</label>
+        <div id="digital-ht-input-checkboxes" class="checkbox-grid">
+            <!-- Will be filled by JavaScript -->
+        </div>
+    </div>
+    <div class="form-group">
+        <label>Select Direct Inputs</label>
+        <div id="digital-ht-direct-input-checkboxes" class="checkbox-grid">
+            <!-- Will be filled by JavaScript -->
+        </div>
+    </div>
+    <div class="form-group">
+        <label for="digital-ht-input-logic">Logic</label>
+        <select id="digital-ht-input-logic">
+            <option value="0">AND (All conditions must be met)</option>
+            <option value="1">OR (Any condition triggers)</option>
+        </select>
+    </div>
+    
+    <h4>HT Sensor Configuration</h4>
+    <div class="form-group">
+        <label for="digital-ht-sensor">Select Sensor</label>
+        <select id="digital-ht-sensor" required>
+            <option value="0">HT1</option>
+            <option value="1">HT2</option>
+            <option value="2">HT3</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="digital-ht-sensor-type">Measurement Type</label>
+        <select id="digital-ht-sensor-type" required>
+            <option value="0">Temperature (°C)</option>
+            <option value="1">Humidity (%)</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="digital-ht-sensor-condition">Condition</label>
+        <select id="digital-ht-sensor-condition" required>
+            <option value="0">Above</option>
+            <option value="1">Below</option>
+            <option value="2">Equal to (±0.5)</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="digital-ht-sensor-threshold" id="digital-ht-threshold-label">Threshold (°C)</label>
+        <input type="number" id="digital-ht-sensor-threshold" step="0.1" min="-40" max="125" value="25.0" required>
+    </div>
+    <div class="digital-ht-info">
+        <p><strong>Combined Digital+HT Sensor Trigger:</strong></p>
+        <ul>
+            <li>Digital inputs will be combined using the selected logic (AND/OR)</li>
+            <li>The HT sensor condition must also be met for the trigger to activate</li>
+            <li>Both digital and HT sensor conditions must be satisfied simultaneously</li>
+        </ul>
+    </div>
+</div>
 
                             <div id="input-condition-sections">
                                 <div class="form-group input-condition-section">
@@ -566,28 +628,87 @@
                                 <input type="text" id="trigger-name" required>
                             </div>
                             <div class="form-group">
-                                <label for="trigger-input">Analog Input</label>
+                                <label for="trigger-type">Trigger Type</label>
+                                <select id="trigger-type" required>
+                                    <option value="0">Analog Input</option>
+                                    <option value="1">HT Sensor</option>
+                                    <option value="2">Combined (Analog + Digital)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="trigger-input">Input Source</label>
                                 <select id="trigger-input" required>
+                                    <!-- Options will be added by JavaScript -->
                                     <option value="0">A1</option>
                                     <option value="1">A2</option>
                                     <option value="2">A3</option>
                                     <option value="3">A4</option>
-                                    <!-- HT sensor options will be added by JavaScript -->
                                 </select>
                             </div>
-                            <div class="form-group">
-                                <label for="trigger-condition">Condition</label>
-                                <select id="trigger-condition" required>
-                                    <option value="0">Above</option>
-                                    <option value="1">Below</option>
-                                    <option value="2">Equal to (±50)</option>
-                                </select>
+                            
+                            <!-- Analog threshold settings -->
+                            <div id="analog-threshold-settings">
+                                <div class="form-group">
+                                    <label for="trigger-condition">Condition</label>
+                                    <select id="trigger-condition" required>
+                                        <option value="0">Above</option>
+                                        <option value="1">Below</option>
+                                        <option value="2">Equal to (±50)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="trigger-threshold">Threshold (0-4095)</label>
+                                    <input type="range" id="trigger-threshold" min="0" max="4095" step="1">
+                                    <span id="threshold-value">2048</span>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label for="trigger-threshold">Threshold (0-4095)</label>
-                                <input type="range" id="trigger-threshold" min="0" max="4095" step="1">
-                                <span id="threshold-value">2048</span>
+                            
+                            <!-- HT sensor settings - will be added dynamically by JavaScript -->
+                            <div id="ht-sensor-settings" style="display:none;">
+                                <div class="form-group">
+                                    <label for="ht-sensor-condition">Condition</label>
+                                    <select id="ht-sensor-condition" required>
+                                        <option value="0">Above</option>
+                                        <option value="1">Below</option>
+                                        <option value="2">Equal to (±0.5)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="ht-sensor-threshold" id="ht-threshold-label">Threshold (°C)</label>
+                                    <input type="number" id="ht-sensor-threshold" step="0.1" min="-40" max="125" value="25.0" required>
+                                </div>
+                                
+                                <!-- Hidden fields to store HT sensor data -->
+                                <input type="hidden" id="ht-sensor-index" value="0">
+                                <input type="hidden" id="ht-sensor-trigger-type" value="0">
                             </div>
+                            
+                            <!-- Combined mode settings -->
+                            <div id="trigger-combined-settings" style="display: none;">
+                                <div class="form-group">
+                                    <label>Combined with Digital Inputs</label>
+                                    <div class="form-group">
+                                        <label for="trigger-input-logic">Logic</label>
+                                        <select id="trigger-input-logic">
+                                            <option value="0">AND (All conditions must be met)</option>
+                                            <option value="1">OR (Any condition triggers)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Select Digital Inputs</label>
+                                        <div id="trigger-input-checkboxes" class="checkbox-grid">
+                                            <!-- Will be filled by JavaScript -->
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Select Direct Inputs</label>
+                                        <div id="trigger-ht-input-checkboxes" class="checkbox-grid">
+                                            <!-- Will be filled by JavaScript -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <div class="form-group">
                                 <label for="trigger-action">Action</label>
                                 <select id="trigger-action" required>
@@ -803,43 +924,6 @@
                         </div>
                     </div>
                     
-                    <div class="settings-card">
-                        <h3>Network Settings</h3>
-                        <div class="form-group">
-                            <label for="wifi-ssid">WiFi SSID</label>
-                            <input type="text" id="wifi-ssid" placeholder="WiFi network name">
-                        </div>
-                        <div class="form-group">
-                            <label for="wifi-password">WiFi Password</label>
-                            <input type="password" id="wifi-password" placeholder="WiFi password">
-                        </div>
-                        <div class="form-group">
-                            <label for="dhcp-mode">Use DHCP</label>
-                            <input type="checkbox" id="dhcp-mode" checked>
-                        </div>
-                        <div id="static-ip-settings" style="display: none;">
-                            <div class="form-group">
-                                <label for="ip-address">IP Address</label>
-                                <input type="text" id="ip-address" placeholder="192.168.1.100">
-                            </div>
-                            <div class="form-group">
-                                <label for="gateway">Gateway</label>
-                                <input type="text" id="gateway" placeholder="192.168.1.1">
-                            </div>
-                            <div class="form-group">
-                                <label for="subnet">Subnet Mask</label>
-                                <input type="text" id="subnet" placeholder="255.255.255.0">
-                            </div>
-                            <div class="form-group">
-                                <label for="dns1">Primary DNS</label>
-                                <input type="text" id="dns1" placeholder="8.8.8.8">
-                            </div>
-                            <div class="form-group">
-                                <label for="dns2">Secondary DNS</label>
-                                <input type="text" id="dns2" placeholder="8.8.4.4">
-                            </div>
-                        </div>
-                    </div>
                     
                     <div class="settings-card">
                         <h3>Date and Time Settings</h3>
@@ -938,6 +1022,81 @@
     <script src="script.js"></script>
 
     <style>
+
+/* Modal window fixes for responsive display and scrolling */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 20px;
+}
+
+.modal-content {
+    position: relative;
+    background-color: #fff;
+    margin: 5vh auto;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* Make sure form actions are always visible */
+.form-actions {
+    position: sticky;
+    bottom: 0;
+    background-color: white;
+    padding: 15px 0 5px 0;
+    margin-top: 20px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    z-index: 10;
+}
+
+/* Ensure modal doesn't get too small on mobile */
+@media (max-width: 768px) {
+    .modal-content {
+        width: 95%;
+        margin: 10px auto;
+        padding: 15px;
+    }
+    
+    .checkbox-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Improve checkbox grid layout */
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+}
+
+/* Add more padding to form groups for better spacing */
+.form-group {
+    margin-bottom: 15px;
+}
+
+/* Ensure modal close button is easily clickable */
+.close-modal {
+    position: absolute;
+    right: 20px;
+    top: 15px;
+    font-size: 24px;
+    cursor: pointer;
+}
+
     /* Network section styles */
     .network-grid {
         display: grid;
@@ -1055,12 +1214,136 @@
         margin-top: 10px;
     }
     
+    /* Styles for analog trigger combined mode */
+    #trigger-combined-settings {
+        background-color: #f9f9f9;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-radius: 5px;
+        border: 1px solid #ddd;
+    }
+
+    #ht-sensor-settings {
+        background-color: #f9f9f9;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-radius: 5px;
+        border: 1px solid #ddd;
+    }
+
+    .trigger-type-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        font-weight: bold;
+        color: white;
+    }
+
+    .trigger-type-analog {
+        background-color: #2196F3; /* Blue */
+    }
+
+    .trigger-type-ht {
+        background-color: #FF9800; /* Orange */
+    }
+
+    .trigger-type-combined {
+        background-color: #9C27B0; /* Purple */
+    }
+
+    .input-container {
+        margin-bottom: 8px;
+        padding: 5px;
+        background-color: #f5f5f5;
+        border-radius: 4px;
+    }
+
+    .input-state-select {
+        margin-left: 5px;
+        padding: 2px 5px;
+        border-radius: 3px;
+        border: 1px solid #ccc;
+        background-color: #fff;
+    }
+    
     @media (max-width: 768px) {
         .network-status-grid {
             grid-template-columns: 1fr;
         }
     }
     </style>
+
+
+<style>
+/* Header status styling improvements */
+.system-status {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+    background-color: #1a2b42;
+    padding: 8px 15px;
+    border-radius: 4px;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    margin-right: 5px;
+    min-width: 120px;
+}
+
+.indicator-label {
+    margin-right: 8px;
+    color: white;
+    font-weight: bold;
+}
+
+.indicator {
+    padding: 2px 5px;
+    border-radius: 3px;
+    background-color: #303f57;
+    color: white;
+    min-width: 40px;
+    text-align: center;
+}
+
+.indicator.connected {
+    background-color: #4CAF50;
+}
+
+.indicator.disconnected {
+    background-color: #F44336;
+}
+
+.status-time {
+    margin-left: auto;
+    color: white;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Ensure text doesn't get cut off */
+#current-time {
+    min-width: 80px;
+}
+
+/* Ensure connection status doesn't overlap time */
+.connection-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    margin-left: 10px;
+    white-space: nowrap;
+}
+</style>
+
+
 </body>
 
 </html>

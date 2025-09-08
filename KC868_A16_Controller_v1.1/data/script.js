@@ -1369,7 +1369,7 @@ function initScheduleUI() {
                 if (singleTarget) singleTarget.style.display = 'none';
                 
                 // For input-based or combined triggers, show input condition sections
-                if (triggerType === 1 || triggerType === 2) {
+                if (triggerType === 1 || triggerType === 2 || triggerType === 3 || triggerType === 4) {
                     if (multipleTargets) multipleTargets.style.display = 'none';
                     if (inputConditions) inputConditions.style.display = 'block';
                 } else {
@@ -1571,6 +1571,11 @@ function initScheduleUI() {
         createSensorTriggerSection();
     }
     
+    // Create Digital+HT Sensor section if it doesn't exist
+    if (!document.getElementById('digital-ht-sensor-section')) {
+        createDigitalHTSensorSection();
+    }
+    
     // Initialize modal scroll fix
     setupModalScrollFix();
 }
@@ -1590,7 +1595,7 @@ function fetchSchedules() {
 }
 
 
-// Enhanced renderSchedulesTable function with improved display of targets for each condition
+// Modify renderSchedulesTable function to include Digital+HT Sensor trigger type
 function renderSchedulesTable(schedules) {
     const tableBody = document.querySelector('#schedules-table tbody');
     if (!tableBody) return;
@@ -1677,6 +1682,28 @@ function renderSchedulesTable(schedules) {
                 
                 triggerText = `${sensorName} ${measurementType} ${condition} ${threshold}${unit}`;
                 break;
+                
+            case 4: // Digital+HT Sensor Combined
+                triggerTypeText = 'Digital+HT';
+                
+                // Format digital input part
+                const digitalPart = formatInputTriggerText(schedule.inputMask, schedule.inputStates, schedule.logic);
+                
+                // Format HT sensor part
+                const htSensorNames = ['HT1', 'HT2', 'HT3'];
+                const htMeasurementTypes = ['Temperature', 'Humidity'];
+                const htConditions = ['>', '<', '='];
+                
+                let htSensorName = htSensorNames[schedule.sensorIndex] || 'Unknown';
+                let htMeasurementType = htMeasurementTypes[schedule.sensorTriggerType] || 'Value';
+                let htCondition = htConditions[schedule.sensorCondition] || '?';
+                let htThreshold = schedule.sensorThreshold;
+                let htUnit = schedule.sensorTriggerType === 0 ? '°C' : '%';
+                
+                const sensorPart = `${htSensorName} ${htMeasurementType} ${htCondition} ${htThreshold}${htUnit}`;
+                
+                triggerText = `${digitalPart} AND ${sensorPart}`;
+                break;
         }
         
         // Format action
@@ -1686,7 +1713,8 @@ function renderSchedulesTable(schedules) {
         let targetText = '';
         
         // For input-based or combined triggers, show both HIGH and LOW targets
-        if ((schedule.triggerType === 1 || schedule.triggerType === 2) && schedule.targetType === 1) {
+        if ((schedule.triggerType === 1 || schedule.triggerType === 2 || 
+             schedule.triggerType === 3 || schedule.triggerType === 4) && schedule.targetType === 1) {
             // Format HIGH condition targets
             let highTargetText = '';
             if (schedule.targetId > 0) {
@@ -1775,6 +1803,9 @@ function renderSchedulesTable(schedules) {
                 background-color: #ffebee;
                 border-left: 3px solid #F44336;
             }
+            .trigger-type-4 {
+                background-color: #673AB7; /* Purple for Digital+HT */
+            }
         `;
         document.head.appendChild(style);
     }
@@ -1829,18 +1860,20 @@ function formatInputTriggerText(inputMask, inputStates, logic) {
     }
 }
 
-// Updated function to update visible sections based on trigger type
+
+// Update the updateVisibleTriggerSections function to include Digital+HT Sensor trigger type
 function updateVisibleTriggerSections(triggerType) {
     const timeSection = document.getElementById('time-trigger-section');
     const inputSection = document.getElementById('input-trigger-section');
     const sensorSection = document.getElementById('sensor-trigger-section');
+    const digitalHTSensorSection = document.getElementById('digital-ht-sensor-section');
     const inputConditions = document.getElementById('input-condition-sections');
     const singleTarget = document.getElementById('single-target');
     const multipleTargets = document.getElementById('multiple-targets');
     const targetType = document.getElementById('schedule-target-type').value;
     
-    if (!timeSection || !inputSection || !sensorSection) {
-        console.error('Time, input, or sensor trigger sections not found!');
+    if (!timeSection || !inputSection) {
+        console.error('Time or input trigger sections not found!');
         return;
     }
     
@@ -1850,7 +1883,8 @@ function updateVisibleTriggerSections(triggerType) {
     // Hide all sections first
     timeSection.style.display = 'none';
     inputSection.style.display = 'none';
-    sensorSection.style.display = 'none';
+    if (sensorSection) sensorSection.style.display = 'none';
+    if (digitalHTSensorSection) digitalHTSensorSection.style.display = 'none';
     if (inputConditions) inputConditions.style.display = 'none';
     
     switch (triggerType) {
@@ -1861,9 +1895,11 @@ function updateVisibleTriggerSections(triggerType) {
             if (targetType === '0') {
                 if (singleTarget) singleTarget.style.display = 'block';
                 if (multipleTargets) multipleTargets.style.display = 'none';
+                if (inputConditions) inputConditions.style.display = 'none';
             } else {
                 if (singleTarget) singleTarget.style.display = 'none';
                 if (multipleTargets) multipleTargets.style.display = 'block';
+                if (inputConditions) inputConditions.style.display = 'none';
             }
             break;
             
@@ -1882,7 +1918,7 @@ function updateVisibleTriggerSections(triggerType) {
             }
             break;
             
-        case 2: // Combined
+        case 2: // Combined (Time + Input)
             timeSection.style.display = 'block';
             inputSection.style.display = 'block';
             
@@ -1899,7 +1935,27 @@ function updateVisibleTriggerSections(triggerType) {
             break;
             
         case 3: // Sensor-based
-            sensorSection.style.display = 'block';
+            if (sensorSection) sensorSection.style.display = 'block';
+            
+            // Show appropriate target section based on target type
+            if (targetType === '0') {
+                if (singleTarget) singleTarget.style.display = 'block';
+                if (multipleTargets) multipleTargets.style.display = 'none';
+                if (inputConditions) inputConditions.style.display = 'none';
+            } else {
+                if (singleTarget) singleTarget.style.display = 'none';
+                if (multipleTargets) multipleTargets.style.display = 'none';
+                if (inputConditions) inputConditions.style.display = 'block';
+            }
+            break;
+            
+        case 4: // Digital+HT Sensor
+            if (digitalHTSensorSection) {
+                digitalHTSensorSection.style.display = 'block';
+                
+                // Make sure we have checkboxes populated
+                createDigitalHTSensorInputCheckboxes();
+            }
             
             // Show appropriate target section based on target type
             if (targetType === '0') {
@@ -1918,6 +1974,7 @@ function updateVisibleTriggerSections(triggerType) {
             timeSection.style.display = 'block';
     }
 }
+
 
 // Function to create the sensor trigger section
 function createSensorTriggerSection() {
@@ -1996,7 +2053,7 @@ function createSensorTriggerSection() {
     }
 }
 
-// Modified openScheduleModal function to handle both HIGH and LOW relay targets
+// Enhanced openScheduleModal function to handle the Digital+HT Sensor section
 function openScheduleModal(scheduleId = null) {
     console.log("Opening schedule modal, id:", scheduleId);
     const modal = document.getElementById('schedule-modal');
@@ -2034,7 +2091,7 @@ function openScheduleModal(scheduleId = null) {
     });
     
     // Reset input checkboxes
-    document.querySelectorAll('#input-checkboxes input[type="checkbox"]').forEach(checkbox => {
+    document.querySelectorAll('#input-checkboxes input[type="checkbox"], #digital-ht-input-checkboxes input[type="checkbox"]').forEach(checkbox => {
         checkbox.checked = false;
         // Reset the state select
         const container = checkbox.closest('.input-container');
@@ -2048,7 +2105,7 @@ function openScheduleModal(scheduleId = null) {
     });
     
     // Reset HT input checkboxes
-    document.querySelectorAll('#ht-input-checkboxes input[type="checkbox"]').forEach(checkbox => {
+    document.querySelectorAll('#ht-input-checkboxes input[type="checkbox"], #digital-ht-direct-input-checkboxes input[type="checkbox"]').forEach(checkbox => {
         checkbox.checked = false;
         // Reset the state select
         const container = checkbox.closest('.input-container');
@@ -2067,28 +2124,30 @@ function openScheduleModal(scheduleId = null) {
     });
     
     // Reset relay checkboxes for input-based conditions
-    document.querySelectorAll('#relay-checkboxes-high input[type="checkbox"]').forEach(checkbox => {
+    document.querySelectorAll('#relay-checkboxes-high input[type="checkbox"], #relay-checkboxes-low input[type="checkbox"]').forEach(checkbox => {
         checkbox.checked = false;
     });
     
-    document.querySelectorAll('#relay-checkboxes-low input[type="checkbox"]').forEach(checkbox => {
-        checkbox.checked = false;
-    });
-    
-    // Make sure we have a sensor-trigger-section
+    // Make sure we have all the required sections
     if (!document.getElementById('sensor-trigger-section')) {
         createSensorTriggerSection();
+    }
+    
+    if (!document.getElementById('digital-ht-sensor-section')) {
+        createDigitalHTSensorSection();
     }
     
     // Show time-based trigger by default and hide others
     const timeSection = document.getElementById('time-trigger-section');
     const inputSection = document.getElementById('input-trigger-section');
     const sensorSection = document.getElementById('sensor-trigger-section');
+    const digitalHTSensorSection = document.getElementById('digital-ht-sensor-section');
     const inputConditions = document.getElementById('input-condition-sections');
     
     if (timeSection) timeSection.style.display = 'block';
     if (inputSection) inputSection.style.display = 'none';
     if (sensorSection) sensorSection.style.display = 'none';
+    if (digitalHTSensorSection) digitalHTSensorSection.style.display = 'none';
     if (inputConditions) inputConditions.style.display = 'none';
     
     // Show single target by default
@@ -2217,6 +2276,69 @@ function openScheduleModal(scheduleId = null) {
                             }
                         }
                         
+                        // Set Digital+HT Sensor fields if applicable
+                        if (schedule.triggerType === 4) {
+                            // Set input logic
+                            const htLogicField = document.getElementById('digital-ht-input-logic');
+                            if (htLogicField) htLogicField.value = schedule.logic;
+                            
+                            // Set digital input checkboxes
+                            for (let i = 0; i < 16; i++) {
+                                const bitMask = (1 << i);
+                                if (schedule.inputMask & bitMask) {
+                                    const checkbox = document.querySelector(`#digital-ht-input-checkboxes input[data-input="${i}"]`);
+                                    if (checkbox) {
+                                        checkbox.checked = true;
+                                        
+                                        // Set the state select to visible and set its value
+                                        const container = checkbox.closest('.input-container');
+                                        if (container) {
+                                            const stateSelect = container.querySelector('.input-state-select');
+                                            if (stateSelect) {
+                                                stateSelect.style.display = 'inline-block';
+                                                stateSelect.value = (schedule.inputStates & bitMask) ? '1' : '0';
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Set HT direct input checkboxes
+                            for (let i = 0; i < 3; i++) {
+                                const bitPos = i + 16;
+                                const bitMask = (1 << bitPos);
+                                if (schedule.inputMask & bitMask) {
+                                    const checkbox = document.querySelector(`#digital-ht-direct-input-checkboxes input[data-input="${bitPos}"]`);
+                                    if (checkbox) {
+                                        checkbox.checked = true;
+                                        
+                                        // Set the state select to visible and set its value
+                                        const container = checkbox.closest('.input-container');
+                                        if (container) {
+                                            const stateSelect = container.querySelector('.input-state-select');
+                                            if (stateSelect) {
+                                                stateSelect.style.display = 'inline-block';
+                                                stateSelect.value = (schedule.inputStates & bitMask) ? '1' : '0';
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Set HT sensor fields
+                            document.getElementById('digital-ht-sensor').value = schedule.sensorIndex;
+                            document.getElementById('digital-ht-sensor-type').value = schedule.sensorTriggerType;
+                            document.getElementById('digital-ht-sensor-condition').value = schedule.sensorCondition;
+                            document.getElementById('digital-ht-sensor-threshold').value = schedule.sensorThreshold;
+                            
+                            // Update threshold label based on sensor type
+                            const thresholdLabel = document.getElementById('digital-ht-threshold-label');
+                            if (thresholdLabel) {
+                                thresholdLabel.textContent = schedule.sensorTriggerType === 0 ? 
+                                    "Threshold (°C)" : "Threshold (%)";
+                            }
+                        }
+                        
                         // Set target based on trigger type and target type
                         if (schedule.triggerType === 0 || schedule.targetType === 0) {
                             // Time-based or single target
@@ -2240,8 +2362,10 @@ function openScheduleModal(scheduleId = null) {
                                     }
                                 }
                             }
-                        } else if ((schedule.triggerType === 1 || schedule.triggerType === 2 || schedule.triggerType === 3) && schedule.targetType === 1) {
-                            // Input-based, combined, or sensor-based with multiple targets
+                        } else if ((schedule.triggerType === 1 || schedule.triggerType === 2 || 
+                                   schedule.triggerType === 3 || schedule.triggerType === 4) && 
+                                   schedule.targetType === 1) {
+                            // Input-based, combined, sensor-based, or Digital+HT sensor with multiple targets
                             if (singleTarget) singleTarget.style.display = 'none';
                             if (multipleTargets) multipleTargets.style.display = 'none';
                             if (inputConditions) inputConditions.style.display = 'block';
@@ -2278,6 +2402,7 @@ function openScheduleModal(scheduleId = null) {
     }
 }
 
+
 // Improved setupModalScrollFix function to handle all modals properly
 function setupModalScrollFix() {
     // For iOS devices - fix modal scrolling issues
@@ -2309,7 +2434,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupModalScrollFix();
 });
 
-// Enhanced save schedule function with better days and input state handling
+// Modified saveSchedule function to handle Digital+HT Sensor trigger type
 function saveSchedule() {
     const scheduleId = document.getElementById('schedule-id').value;
     const isNew = scheduleId === '';
@@ -2397,13 +2522,55 @@ function saveSchedule() {
         sensorThreshold = parseFloat(document.getElementById('schedule-sensor-threshold').value);
     }
     
+    // Process Digital+HT Sensor fields if applicable
+    if (triggerType === 4) {
+        // Get logic (AND/OR)
+        logic = parseInt(document.getElementById('digital-ht-input-logic').value);
+        
+        // Process digital inputs
+        document.querySelectorAll('#digital-ht-input-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
+            const inputId = parseInt(checkbox.getAttribute('data-input'));
+            inputMask |= (1 << inputId);
+            
+            // Get desired state
+            const container = checkbox.closest('.input-container');
+            if (container) {
+                const stateSelect = container.querySelector('.input-state-select');
+                if (stateSelect && stateSelect.value === '1') {
+                    inputStates |= (1 << inputId); // Set to HIGH
+                }
+            }
+        });
+        
+        // Process HT direct inputs
+        document.querySelectorAll('#digital-ht-direct-input-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
+            const inputId = parseInt(checkbox.getAttribute('data-input'));
+            inputMask |= (1 << inputId);
+            
+            // Get desired state
+            const container = checkbox.closest('.input-container');
+            if (container) {
+                const stateSelect = container.querySelector('.input-state-select');
+                if (stateSelect && stateSelect.value === '1') {
+                    inputStates |= (1 << inputId); // Set to HIGH
+                }
+            }
+        });
+        
+        // Get HT sensor settings
+        sensorIndex = parseInt(document.getElementById('digital-ht-sensor').value);
+        sensorTriggerType = parseInt(document.getElementById('digital-ht-sensor-type').value);
+        sensorCondition = parseInt(document.getElementById('digital-ht-sensor-condition').value);
+        sensorThreshold = parseFloat(document.getElementById('digital-ht-sensor-threshold').value);
+    }
+    
     // Get target for HIGH state
     const targetType = parseInt(document.getElementById('schedule-target-type').value);
     let targetId = 0;
     let targetIdLow = 0;
     
     // Handle the case for input-based or combined trigger types
-    if (triggerType === 1 || triggerType === 2 || triggerType === 3) {
+    if (triggerType === 1 || triggerType === 2 || triggerType === 3 || triggerType === 4) {
         if (targetType === 0) {
             // Single relay - not used for dual condition mode
             targetId = parseInt(document.getElementById('schedule-target-id').value);
@@ -2470,8 +2637,15 @@ function saveSchedule() {
         return;
     }
     
+    // Validate Digital+HT Sensor schedule has at least one digital input selected
+    if (triggerType === 4 && inputMask === 0) {
+        showToast('Please select at least one digital input for Digital+HT Sensor schedule', 'warning');
+        return;
+    }
+    
     // For input-based or combined, ensure at least one relay is selected for HIGH or LOW
-    if ((triggerType === 1 || triggerType === 2 || triggerType === 3) && targetType === 1 && (targetId === 0 && targetIdLow === 0)) {
+    if ((triggerType === 1 || triggerType === 2 || triggerType === 3 || triggerType === 4) && 
+        targetType === 1 && (targetId === 0 && targetIdLow === 0)) {
         showToast('Please select at least one relay for either HIGH or LOW condition', 'warning');
         return;
     }
@@ -2509,7 +2683,7 @@ function saveSchedule() {
             fetchSchedules();
             
             // For input-based schedules, immediately evaluate them
-            if (triggerType === 1 || triggerType === 2) {
+            if (triggerType === 1 || triggerType === 2 || triggerType === 4) {
                 evaluateInputBasedSchedules();
             }
         } else {
@@ -2521,6 +2695,7 @@ function saveSchedule() {
         showToast(`Network error. Could not ${isNew ? 'create' : 'update'} schedule`, 'error');
     });
 }
+
 
 // Add this function to automatically sync time from browser to device
 function autoSyncTimeFromBrowser() {
@@ -2841,7 +3016,7 @@ window.toggleSchedule = function(scheduleId, enabled) {
     });
 };
 
-// Initialize analog triggers UI - FIXED VERSION
+// Update to initTriggerUI function to add combined trigger support
 function initTriggerUI() {
     // Load triggers
     fetchAnalogTriggers();
@@ -2867,6 +3042,14 @@ function initTriggerUI() {
         triggerForm.addEventListener('submit', function(e) {
             e.preventDefault();
             saveTrigger();
+        });
+    }
+    
+    // Setup trigger type change
+    const triggerTypeSelect = document.getElementById('trigger-type');
+    if (triggerTypeSelect) {
+        triggerTypeSelect.addEventListener('change', function() {
+            updateTriggerTypeVisibility(this.value);
         });
     }
     
@@ -2923,6 +3106,12 @@ function initTriggerUI() {
         });
     }
     
+    // Create digital input checkboxes if they don't exist
+    createDigitalInputCheckboxes();
+    
+    // Create HT sensor selectors
+    createHTSensorTriggerUI();
+    
     // Add analog input options to the trigger input select
     const triggerInputSelect = document.getElementById('trigger-input');
     if (triggerInputSelect) {
@@ -2947,18 +3136,219 @@ function initTriggerUI() {
         htOptgroup.label = "Temperature & Humidity Sensors";
         
         htOptgroup.innerHTML = `
-            <option value="ht0_temp">HT1 Temperature</option>
-            <option value="ht0_hum">HT1 Humidity</option>
-            <option value="ht1_temp">HT2 Temperature</option>
-            <option value="ht1_hum">HT2 Humidity</option>
-            <option value="ht2_temp">HT3 Temperature</option>
-            <option value="ht2_hum">HT3 Humidity</option>
+            <option value="100">HT1 Temperature</option>
+            <option value="101">HT1 Humidity</option>
+            <option value="102">HT2 Temperature</option>
+            <option value="103">HT2 Humidity</option>
+            <option value="104">HT3 Temperature</option>
+            <option value="105">HT3 Humidity</option>
         `;
         
         triggerInputSelect.appendChild(htOptgroup);
+        
+        // Listen for changes to show appropriate sections
+        triggerInputSelect.addEventListener('change', function() {
+            const value = parseInt(this.value);
+            
+            // Show/hide HT sensor specific settings
+            const htSensorSettings = document.getElementById('ht-sensor-settings');
+            const analogSettings = document.getElementById('analog-threshold-settings');
+            
+            if (value >= 100) { // HT sensor selected
+                if (htSensorSettings) htSensorSettings.style.display = 'block';
+                if (analogSettings) analogSettings.style.display = 'none';
+                
+                // Set appropriate HT sensor index and trigger type
+                const htIndex = Math.floor((value - 100) / 2);
+                const triggerType = (value - 100) % 2; // 0 = temperature, 1 = humidity
+                
+                document.getElementById('ht-sensor-index').value = htIndex;
+                document.getElementById('ht-sensor-trigger-type').value = triggerType;
+                
+                // Update threshold label
+                updateHTSensorThresholdLabel(triggerType);
+            } else {
+                if (htSensorSettings) htSensorSettings.style.display = 'none';
+                if (analogSettings) analogSettings.style.display = 'block';
+            }
+        });
+    }
+    
+    // Initialize combined mode checkbox
+    const combinedModeCheckbox = document.getElementById('trigger-combined-mode');
+    if (combinedModeCheckbox) {
+        combinedModeCheckbox.addEventListener('change', function() {
+            const combinedSettings = document.getElementById('trigger-combined-settings');
+            if (combinedSettings) {
+                combinedSettings.style.display = this.checked ? 'block' : 'none';
+            }
+        });
     }
 }
 
+// Create digital input checkboxes for combined triggers
+function createDigitalInputCheckboxes() {
+    const inputSection = document.getElementById('trigger-input-checkboxes');
+    if (!inputSection) return;
+    
+    inputSection.innerHTML = '';
+    
+    // Create digital input checkboxes
+    for (let i = 0; i < 16; i++) {
+        const container = document.createElement('div');
+        container.className = 'input-container';
+        
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.setAttribute('data-input', i);
+        
+        // Create state select that appears when checked
+        const stateSelect = document.createElement('select');
+        stateSelect.className = 'input-state-select';
+        stateSelect.style.display = 'none'; // Initially hidden
+        stateSelect.innerHTML = `
+            <option value="0">LOW</option>
+            <option value="1">HIGH</option>
+        `;
+        
+        // Show/hide state select when checkbox changes
+        checkbox.addEventListener('change', function() {
+            stateSelect.style.display = this.checked ? 'inline-block' : 'none';
+        });
+        
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(` Input ${i+1} `));
+        container.appendChild(label);
+        container.appendChild(stateSelect);
+        
+        inputSection.appendChild(container);
+    }
+    
+    // Create HT input checkboxes
+    const htInputSection = document.getElementById('trigger-ht-input-checkboxes');
+    if (!htInputSection) return;
+    
+    htInputSection.innerHTML = '';
+    
+    // Add HT1-HT3 digital inputs
+    for (let i = 0; i < 3; i++) {
+        const container = document.createElement('div');
+        container.className = 'input-container';
+        
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.setAttribute('data-input', i + 16); // HT inputs are at bits 16-18
+        
+        // Create state select that appears when checked
+        const stateSelect = document.createElement('select');
+        stateSelect.className = 'input-state-select';
+        stateSelect.style.display = 'none'; // Initially hidden
+        stateSelect.innerHTML = `
+            <option value="0">LOW</option>
+            <option value="1">HIGH</option>
+        `;
+        
+        // Show/hide state select when checkbox changes
+        checkbox.addEventListener('change', function() {
+            stateSelect.style.display = this.checked ? 'inline-block' : 'none';
+        });
+        
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(` HT${i+1} `));
+        container.appendChild(label);
+        container.appendChild(stateSelect);
+        
+        htInputSection.appendChild(container);
+    }
+}
+
+// Create HT sensor trigger UI
+function createHTSensorTriggerUI() {
+    const htSensorSettings = document.getElementById('ht-sensor-settings');
+    if (htSensorSettings) return; // Already created
+    
+    // Find insert point - after analog threshold settings
+    const analogSettings = document.getElementById('analog-threshold-settings');
+    if (!analogSettings) return;
+    
+    const htSettings = document.createElement('div');
+    htSettings.id = 'ht-sensor-settings';
+    htSettings.style.display = 'none'; // Hidden by default
+    htSettings.innerHTML = `
+        <div class="form-group">
+            <label for="ht-sensor-condition">Condition</label>
+            <select id="ht-sensor-condition" required>
+                <option value="0">Above</option>
+                <option value="1">Below</option>
+                <option value="2">Equal to (±0.5)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="ht-sensor-threshold" id="ht-threshold-label">Threshold (°C)</label>
+            <input type="number" id="ht-sensor-threshold" step="0.1" min="-40" max="125" value="25.0" required>
+        </div>
+        
+        <!-- Hidden fields to store HT sensor data -->
+        <input type="hidden" id="ht-sensor-index" value="0">
+        <input type="hidden" id="ht-sensor-trigger-type" value="0">
+    `;
+    
+    analogSettings.parentNode.insertBefore(htSettings, analogSettings.nextSibling);
+    
+    // Add event listener for trigger type changes
+    const triggerTypeSelect = document.getElementById('ht-sensor-trigger-type');
+    if (triggerTypeSelect) {
+        triggerTypeSelect.addEventListener('change', function() {
+            updateHTSensorThresholdLabel(parseInt(this.value));
+        });
+    }
+}
+
+// Update threshold label based on sensor measurement type
+function updateHTSensorThresholdLabel(triggerType) {
+    const thresholdLabel = document.getElementById('ht-threshold-label');
+    const thresholdInput = document.getElementById('ht-sensor-threshold');
+    
+    if (thresholdLabel && thresholdInput) {
+        if (triggerType === 0) { // Temperature
+            thresholdLabel.textContent = 'Threshold (°C)';
+            thresholdInput.min = '-40';
+            thresholdInput.max = '125';
+            thresholdInput.value = '25.0';
+        } else { // Humidity
+            thresholdLabel.textContent = 'Threshold (%)';
+            thresholdInput.min = '0';
+            thresholdInput.max = '100';
+            thresholdInput.value = '50.0';
+        }
+    }
+}
+
+// Update trigger type visibility
+function updateTriggerTypeVisibility(type) {
+    const analogSettings = document.getElementById('analog-threshold-settings');
+    const htSettings = document.getElementById('ht-sensor-settings');
+    const combinedSettings = document.getElementById('trigger-combined-settings');
+    
+    // Default all sections to hidden
+    if (analogSettings) analogSettings.style.display = 'none';
+    if (htSettings) htSettings.style.display = 'none';
+    if (combinedSettings) combinedSettings.style.display = 'none';
+    
+    // Show appropriate sections based on type
+    if (type === '0') { // Standard Analog
+        if (analogSettings) analogSettings.style.display = 'block';
+    }
+    else if (type === '1') { // HT Sensor
+        if (htSettings) htSettings.style.display = 'block';
+    }
+    else if (type === '2') { // Combined
+        if (analogSettings) analogSettings.style.display = 'block';
+        if (combinedSettings) combinedSettings.style.display = 'block';
+    }
+}
 
 // Initialize input controls
 function initInputControls() {
@@ -3014,7 +3404,7 @@ function fetchAnalogTriggers() {
         });
 }
 
-// Render triggers table - FIXED
+// Modified renderTriggersTable function to show combined trigger info
 function renderTriggersTable(triggers) {
     const tableBody = document.querySelector('#triggers-table tbody');
     if (!tableBody) return;
@@ -3033,20 +3423,40 @@ function renderTriggersTable(triggers) {
         
         // Format input
         let inputName;
-        if (typeof trigger.analogInput === 'string' && trigger.analogInput.startsWith('ht')) {
+        let conditionText;
+        
+        if (trigger.analogInput >= 100) { // HT sensor
             // Parse the HT sensor trigger
-            const parts = trigger.analogInput.split('_');
-            const htIndex = parseInt(parts[0].replace('ht', ''));
-            const type = parts[1];
+            const htIndex = Math.floor((trigger.analogInput - 100) / 2);
+            const type = (trigger.analogInput - 100) % 2 === 0 ? 'temp' : 'hum';
             inputName = `HT${htIndex + 1} ${type === 'temp' ? 'Temperature' : 'Humidity'}`;
+            
+            // Format condition based on sensor type
+            const conditions = ['Above', 'Below', 'Equal to'];
+            const value = trigger.sensorThreshold;
+            const unit = type === 'temp' ? '°C' : '%';
+            conditionText = `${conditions[trigger.sensorCondition]} ${value}${unit}`;
         } else {
             // Standard analog input
             const inputs = ['A1', 'A2', 'A3', 'A4'];
             inputName = inputs[trigger.analogInput] || 'Unknown';
+            
+            // Format condition
+            const conditions = ['Above', 'Below', 'Equal to'];
+            conditionText = `${conditions[trigger.condition]} ${trigger.threshold}`;
+            
+            // Add combined mode info if enabled
+            if (trigger.combinedMode) {
+                inputName += ' + Inputs';
+                
+                // Add info about digital inputs
+                const inputCount = countBits(trigger.inputMask);
+                if (inputCount > 0) {
+                    const logic = trigger.logic === 0 ? 'AND' : 'OR';
+                    inputName += ` (${inputCount} inputs, ${logic})`;
+                }
+            }
         }
-        
-        // Format condition
-        const conditions = ['Above', 'Below', 'Equal to'];
         
         // Format action
         const actions = ['Turn OFF', 'Turn ON', 'Toggle'];
@@ -3072,7 +3482,7 @@ function renderTriggersTable(triggers) {
             <td><input type="checkbox" ${trigger.enabled ? 'checked' : ''} onchange="toggleTrigger(${trigger.id}, this.checked)"></td>
             <td>${trigger.name}</td>
             <td>${inputName}</td>
-            <td>${conditions[trigger.condition]}</td>
+            <td>${conditionText}</td>
             <td>${trigger.threshold}</td>
             <td>${actions[trigger.action]}</td>
             <td>${targetText}</td>
@@ -3088,8 +3498,17 @@ function renderTriggersTable(triggers) {
     });
 }
 
+// Helper function to count set bits
+function countBits(n) {
+    let count = 0;
+    while (n) {
+        count += n & 1;
+        n >>= 1;
+    }
+    return count;
+}
 
-// Open trigger modal - FIXED
+// Modified openTriggerModal function to support combined triggers
 function openTriggerModal(triggerId = null) {
     const modal = document.getElementById('trigger-modal');
     if (!modal) return;
@@ -3106,9 +3525,26 @@ function openTriggerModal(triggerId = null) {
         checkbox.checked = false;
     });
     
+    // Reset combined mode checkboxes
+    document.querySelectorAll('#trigger-input-checkboxes input[type="checkbox"], #trigger-ht-input-checkboxes input[type="checkbox"]').forEach(checkbox => {
+        checkbox.checked = false;
+        // Reset state selects
+        const container = checkbox.closest('.input-container');
+        if (container) {
+            const stateSelect = container.querySelector('.input-state-select');
+            if (stateSelect) {
+                stateSelect.style.display = 'none';
+                stateSelect.value = '0';
+            }
+        }
+    });
+    
     // Show single target by default
     document.getElementById('trigger-single-target').style.display = 'block';
     document.getElementById('trigger-multiple-targets').style.display = 'none';
+    
+    // Reset trigger type visibility
+    updateTriggerTypeVisibility('0'); // Default to standard analog
     
     if (triggerId !== null) {
         // Load trigger data
@@ -3121,10 +3557,83 @@ function openTriggerModal(triggerId = null) {
                         document.getElementById('trigger-id').value = trigger.id;
                         document.getElementById('trigger-enabled').checked = trigger.enabled;
                         document.getElementById('trigger-name').value = trigger.name;
-                        document.getElementById('trigger-input').value = trigger.analogInput;
-                        document.getElementById('trigger-condition').value = trigger.condition;
-                        document.getElementById('trigger-threshold').value = trigger.threshold;
-                        document.getElementById('threshold-value').textContent = trigger.threshold;
+                        
+                        // Determine trigger type
+                        let triggerType = '0'; // Default to standard analog
+                        
+                        if (trigger.analogInput >= 100) {
+                            triggerType = '1'; // HT Sensor
+                            
+                            // Set HT sensor details
+                            document.getElementById('ht-sensor-index').value = trigger.htSensorIndex || 0;
+                            document.getElementById('ht-sensor-trigger-type').value = trigger.sensorTriggerType || 0;
+                            document.getElementById('ht-sensor-condition').value = trigger.sensorCondition || 0;
+                            document.getElementById('ht-sensor-threshold').value = trigger.sensorThreshold || 25.0;
+                            
+                            // Update label
+                            updateHTSensorThresholdLabel(trigger.sensorTriggerType || 0);
+                        } else {
+                            // Standard analog or combined
+                            document.getElementById('trigger-input').value = trigger.analogInput;
+                            document.getElementById('trigger-condition').value = trigger.condition;
+                            document.getElementById('trigger-threshold').value = trigger.threshold;
+                            document.getElementById('threshold-value').textContent = trigger.threshold;
+                            
+                            if (trigger.combinedMode) {
+                                triggerType = '2'; // Combined
+                                document.getElementById('trigger-combined-mode').checked = true;
+                                document.getElementById('trigger-input-logic').value = trigger.logic || 0;
+                                
+                                // Set digital input checkboxes
+                                for (let i = 0; i < 16; i++) {
+                                    const bitMask = (1 << i);
+                                    if (trigger.inputMask & bitMask) {
+                                        const checkbox = document.querySelector(`#trigger-input-checkboxes input[data-input="${i}"]`);
+                                        if (checkbox) {
+                                            checkbox.checked = true;
+                                            
+                                            // Set state select
+                                            const container = checkbox.closest('.input-container');
+                                            if (container) {
+                                                const stateSelect = container.querySelector('.input-state-select');
+                                                if (stateSelect) {
+                                                    stateSelect.style.display = 'inline-block';
+                                                    stateSelect.value = (trigger.inputStates & bitMask) ? '1' : '0';
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Set HT input checkboxes
+                                for (let i = 0; i < 3; i++) {
+                                    const bitPos = i + 16;
+                                    const bitMask = (1 << bitPos);
+                                    if (trigger.inputMask & bitMask) {
+                                        const checkbox = document.querySelector(`#trigger-ht-input-checkboxes input[data-input="${bitPos}"]`);
+                                        if (checkbox) {
+                                            checkbox.checked = true;
+                                            
+                                            // Set state select
+                                            const container = checkbox.closest('.input-container');
+                                            if (container) {
+                                                const stateSelect = container.querySelector('.input-state-select');
+                                                if (stateSelect) {
+                                                    stateSelect.style.display = 'inline-block';
+                                                    stateSelect.value = (trigger.inputStates & bitMask) ? '1' : '0';
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Set trigger type and update visibility
+                        document.getElementById('trigger-type').value = triggerType;
+                        updateTriggerTypeVisibility(triggerType);
+                        
+                        // Set action and target type
                         document.getElementById('trigger-action').value = trigger.action;
                         document.getElementById('trigger-target-type').value = trigger.targetType;
                         
@@ -3157,10 +3666,14 @@ function openTriggerModal(triggerId = null) {
 }
 
 
-// Save trigger - FIXED
+
+// Modified saveTrigger function to handle combined triggers
 function saveTrigger() {
     const triggerId = document.getElementById('trigger-id').value;
     const isNew = !triggerId;
+    
+    // Get trigger type
+    const triggerType = document.getElementById('trigger-type').value;
     
     // Get target
     const targetType = parseInt(document.getElementById('trigger-target-type').value);
@@ -3177,18 +3690,80 @@ function saveTrigger() {
         });
     }
     
-    // Create trigger object
+    // Create base trigger object
     const trigger = {
         id: triggerId ? parseInt(triggerId) : null,
         enabled: document.getElementById('trigger-enabled').checked,
         name: document.getElementById('trigger-name').value || `Trigger ${Date.now()}`,
-        analogInput: document.getElementById('trigger-input').value,
-        condition: parseInt(document.getElementById('trigger-condition').value),
-        threshold: parseInt(document.getElementById('trigger-threshold').value),
         action: parseInt(document.getElementById('trigger-action').value),
         targetType: targetType,
         targetId: targetId
     };
+    
+    // Add specific fields based on trigger type
+    if (triggerType === '0') { // Standard analog
+        trigger.analogInput = parseInt(document.getElementById('trigger-input').value);
+        trigger.threshold = parseInt(document.getElementById('trigger-threshold').value);
+        trigger.condition = parseInt(document.getElementById('trigger-condition').value);
+        trigger.combinedMode = false;
+    }
+    else if (triggerType === '1') { // HT Sensor based
+        // Store sensor type in analogInput field (100 = HT1 temp, 101 = HT1 humidity, etc.)
+        const htIndex = parseInt(document.getElementById('ht-sensor-index').value);
+        const triggerMeasurement = parseInt(document.getElementById('ht-sensor-trigger-type').value);
+        trigger.analogInput = 100 + (htIndex * 2) + triggerMeasurement;
+        
+        // Add sensor specific fields
+        trigger.htSensorIndex = htIndex;
+        trigger.sensorTriggerType = triggerMeasurement;
+        trigger.sensorCondition = parseInt(document.getElementById('ht-sensor-condition').value);
+        trigger.sensorThreshold = parseFloat(document.getElementById('ht-sensor-threshold').value);
+        trigger.combinedMode = false;
+    }
+    else if (triggerType === '2') { // Combined
+        trigger.analogInput = parseInt(document.getElementById('trigger-input').value);
+        trigger.threshold = parseInt(document.getElementById('trigger-threshold').value);
+        trigger.condition = parseInt(document.getElementById('trigger-condition').value);
+        trigger.combinedMode = true;
+        trigger.logic = parseInt(document.getElementById('trigger-input-logic').value);
+        
+        // Calculate input masks
+        let inputMask = 0;
+        let inputStates = 0;
+        
+        // Process digital inputs
+        document.querySelectorAll('#trigger-input-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
+            const inputId = parseInt(checkbox.getAttribute('data-input'));
+            inputMask |= (1 << inputId);
+            
+            // Get state from select
+            const container = checkbox.closest('.input-container');
+            if (container) {
+                const stateSelect = container.querySelector('.input-state-select');
+                if (stateSelect && stateSelect.value === '1') {
+                    inputStates |= (1 << inputId);
+                }
+            }
+        });
+        
+        // Process HT inputs
+        document.querySelectorAll('#trigger-ht-input-checkboxes input[type="checkbox"]:checked').forEach(checkbox => {
+            const inputId = parseInt(checkbox.getAttribute('data-input'));
+            inputMask |= (1 << inputId);
+            
+            // Get state from select
+            const container = checkbox.closest('.input-container');
+            if (container) {
+                const stateSelect = container.querySelector('.input-state-select');
+                if (stateSelect && stateSelect.value === '1') {
+                    inputStates |= (1 << inputId);
+                }
+            }
+        });
+        
+        trigger.inputMask = inputMask;
+        trigger.inputStates = inputStates;
+    }
     
     console.log("Saving analog trigger:", trigger);
     
@@ -5538,6 +6113,184 @@ function saveNetworkSettings() {
         console.error('Error saving network settings:', error);
         showToast('Network error. Could not save settings', 'error');
     });
+}
+
+// Create Digital+HT Sensor section for the schedule modal
+function createDigitalHTSensorSection() {
+    const form = document.getElementById('schedule-form');
+    if (!form) return;
+    
+    // Create the section
+    const digitalHTSensorSection = document.createElement('div');
+    digitalHTSensorSection.id = 'digital-ht-sensor-section';
+    digitalHTSensorSection.style.display = 'none';
+    digitalHTSensorSection.innerHTML = `
+        <h4>Digital Inputs Configuration</h4>
+        <div class="form-group">
+            <label>Select Digital Inputs</label>
+            <div id="digital-ht-input-checkboxes" class="checkbox-grid">
+                <!-- Will be filled by JavaScript -->
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Select Direct Inputs</label>
+            <div id="digital-ht-direct-input-checkboxes" class="checkbox-grid">
+                <!-- Will be filled by JavaScript -->
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="digital-ht-input-logic">Logic</label>
+            <select id="digital-ht-input-logic">
+                <option value="0">AND (All conditions must be met)</option>
+                <option value="1">OR (Any condition triggers)</option>
+            </select>
+        </div>
+        
+        <h4>HT Sensor Configuration</h4>
+        <div class="form-group">
+            <label for="digital-ht-sensor">Select Sensor</label>
+            <select id="digital-ht-sensor" required>
+                <option value="0">HT1</option>
+                <option value="1">HT2</option>
+                <option value="2">HT3</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="digital-ht-sensor-type">Measurement Type</label>
+            <select id="digital-ht-sensor-type" required>
+                <option value="0">Temperature (°C)</option>
+                <option value="1">Humidity (%)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="digital-ht-sensor-condition">Condition</label>
+            <select id="digital-ht-sensor-condition" required>
+                <option value="0">Above</option>
+                <option value="1">Below</option>
+                <option value="2">Equal to (±0.5)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="digital-ht-sensor-threshold" id="digital-ht-threshold-label">Threshold (°C)</label>
+            <input type="number" id="digital-ht-sensor-threshold" step="0.1" min="-40" max="125" value="25.0" required>
+        </div>
+        <div class="digital-ht-info">
+            <p><strong>Combined Digital+HT Sensor Trigger:</strong></p>
+            <ul>
+                <li>Digital inputs will be combined using the selected logic (AND/OR)</li>
+                <li>The HT sensor condition must also be met for the trigger to activate</li>
+                <li>Both digital and HT sensor conditions must be satisfied simultaneously</li>
+            </ul>
+        </div>
+    `;
+    
+    // Find where to insert it
+    const sensorSection = document.getElementById('sensor-trigger-section');
+    if (sensorSection && sensorSection.parentNode) {
+        sensorSection.parentNode.insertBefore(digitalHTSensorSection, sensorSection.nextSibling);
+    } else {
+        // If sensor section doesn't exist yet, add to the end of form
+        form.appendChild(digitalHTSensorSection);
+    }
+    
+    // Setup change handler for HT sensor type
+    const htSensorTypeSelect = document.getElementById('digital-ht-sensor-type');
+    if (htSensorTypeSelect) {
+        htSensorTypeSelect.addEventListener('change', function() {
+            const thresholdLabel = document.getElementById('digital-ht-threshold-label');
+            const thresholdInput = document.getElementById('digital-ht-sensor-threshold');
+            
+            if (this.value === "0") { // Temperature
+                thresholdLabel.textContent = "Threshold (°C)";
+                thresholdInput.min = "-40";
+                thresholdInput.max = "125";
+                thresholdInput.value = "25.0";
+            } else { // Humidity
+                thresholdLabel.textContent = "Threshold (%)";
+                thresholdInput.min = "0";
+                thresholdInput.max = "100";
+                thresholdInput.value = "50.0";
+            }
+        });
+    }
+    
+    // Immediately populate the input checkboxes
+    createDigitalHTSensorInputCheckboxes();
+}
+
+// Function to create Digital+HT Sensor input checkboxes
+function createDigitalHTSensorInputCheckboxes() {
+    // Fill digital input checkboxes
+    const digitalInputsCheckboxes = document.getElementById('digital-ht-input-checkboxes');
+    if (digitalInputsCheckboxes) {
+        digitalInputsCheckboxes.innerHTML = '';
+        for (let i = 0; i < 16; i++) {
+            const container = document.createElement('div');
+            container.className = 'input-container';
+            
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.setAttribute('data-input', i);
+            
+            // Create state select that appears when checked
+            const stateSelect = document.createElement('select');
+            stateSelect.className = 'input-state-select';
+            stateSelect.style.display = 'none'; // Initially hidden
+            stateSelect.innerHTML = `
+                <option value="0">LOW</option>
+                <option value="1">HIGH</option>
+            `;
+            
+            // Show/hide state select when checkbox changes
+            checkbox.addEventListener('change', function() {
+                stateSelect.style.display = this.checked ? 'inline-block' : 'none';
+            });
+            
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(` Input ${i+1} `));
+            container.appendChild(label);
+            container.appendChild(stateSelect);
+            
+            digitalInputsCheckboxes.appendChild(container);
+        }
+    }
+    
+    // Fill HT direct input checkboxes
+    const htDirectInputsCheckboxes = document.getElementById('digital-ht-direct-input-checkboxes');
+    if (htDirectInputsCheckboxes) {
+        htDirectInputsCheckboxes.innerHTML = '';
+        for (let i = 0; i < 3; i++) {
+            const container = document.createElement('div');
+            container.className = 'input-container';
+            
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.setAttribute('data-input', i + 16); // HT inputs are at bits 16-18
+            
+            // Create state select that appears when checked
+            const stateSelect = document.createElement('select');
+            stateSelect.className = 'input-state-select';
+            stateSelect.style.display = 'none'; // Initially hidden
+            stateSelect.innerHTML = `
+                <option value="0">LOW</option>
+                <option value="1">HIGH</option>
+            `;
+            
+            // Show/hide state select when checkbox changes
+            checkbox.addEventListener('change', function() {
+                stateSelect.style.display = this.checked ? 'inline-block' : 'none';
+            });
+            
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(` HT${i+1} `));
+            container.appendChild(label);
+            container.appendChild(stateSelect);
+            
+            htDirectInputsCheckboxes.appendChild(container);
+        }
+    }
 }
 
 
