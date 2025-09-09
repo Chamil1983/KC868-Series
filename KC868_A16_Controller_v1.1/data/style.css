@@ -79,20 +79,34 @@ h1 {
     display: flex;
     align-items: center;
     gap: 15px;
+    flex-wrap: wrap;
+    background-color: #1a2b42;
+    padding: 8px 15px;
+    border-radius: 4px;
 }
 
 .status-indicator {
     display: flex;
     align-items: center;
-    gap: 5px;
+    margin-right: 5px;
+    min-width: 120px;
 }
 
 .indicator {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background-color: #ccc;
+    padding: 2px 5px;
+    border-radius: 3px;
+    background-color: #303f57;
+    color: white;
+    min-width: 40px;
+    text-align: center;
+}
+
+.indicator.connected {
+    background-color: #4CAF50;
+}
+
+.indicator.disconnected {
+    background-color: #F44336;
 }
 
 .connected {
@@ -103,9 +117,17 @@ h1 {
     background-color: #F44336;
 }
 
+#current-time {
+    min-width: 80px;
+}
+
 .status-time {
+    margin-left: auto;
+    color: white;
     font-weight: bold;
-    margin-left: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 /* Navigation styles */
@@ -277,10 +299,16 @@ nav ul li a.active {
 }
 
 .status-indicator {
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
-    background-color: #ccc;
+    display: flex;
+    align-items: center;
+    margin-right: 5px;
+    min-width: 120px;
+}
+
+.indicator-label {
+    margin-right: 8px;
+    color: white;
+    font-weight: bold;
 }
 
 .status-indicator.on {
@@ -897,6 +925,7 @@ input:checked + .slider:before {
     font-size: 0.8rem;
     font-weight: bold;
     margin-left: 10px;
+    white-space: nowrap;
 }
 
 .connection-status.connected {
@@ -1465,4 +1494,84 @@ nav ul li a[data-section="input-interrupts"] {
     border-radius: 3px;
     border: 1px solid #ccc;
     background-color: #fff;
+
+}
+
+/* Enhanced styles for network status display */
+.network-status-panels {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 15px;
+}
+
+.status-card {
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    background-color: #f5f5f5;
+}
+
+.status-card h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #1a2b42;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 5px;
+}
+
+.status-card p {
+    margin: 8px 0;
+}
+
+.status-card.success {
+    background-color: #e8f5e9;
+    border-left: 4px solid #4CAF50;
+}
+
+.status-card.warning {
+    background-color: #fff3e0;
+    border-left: 4px solid #FF9800;
+}
+
+.status-card.error {
+    background-color: #ffebee;
+    border-left: 4px solid #F44336;
+}
+
+.status-card.loading {
+    background-color: #e3f2fd;
+    border-left: 4px solid #2196F3;
+}
+
+.badge {
+    display: inline-block;
+    padding: 3px 7px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white;
+}
+
+.badge-success {
+    background-color: #4CAF50;
+}
+
+.badge-primary {
+    background-color: #2196F3;
+}
+
+.badge-warning {
+    background-color: #FF9800;
+}
+
+.badge-danger {
+    background-color: #F44336;
+}
+
+.badge-info {
+    background-color: #00BCD4;
+}
+
+.badge-secondary {
+    background-color: #757575;
 }

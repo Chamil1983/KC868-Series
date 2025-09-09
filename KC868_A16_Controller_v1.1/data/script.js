@@ -331,36 +331,76 @@ function initApp() {
     showToast('Welcome to KC868-A16 Smart Home Controller');
 }
 
-// Enhance the updateDashboard function to show network info
+
+// Enhance the updateDashboard function to show network info consistently
 function updateDashboard(data) {
     // Update device name
-    document.getElementById('device-name').textContent = data.device;
+    document.getElementById('device-name').textContent = data.device || 'KC868-A16';
     
     // Update system uptime
-    document.getElementById('system-uptime').textContent = data.uptime;
+    document.getElementById('system-uptime').textContent = data.uptime || '0';
     
     // Update connection info
     document.getElementById('wifi-status').className = data.wifi_connected ? 'indicator connected' : 'indicator disconnected';
     document.getElementById('eth-status').className = data.eth_connected ? 'indicator connected' : 'indicator disconnected';
-    document.getElementById('protocol-status').textContent = data.active_protocol;
+    document.getElementById('protocol-status').textContent = data.active_protocol || 'Unknown';
     
-    // Update IP addresses
-    document.getElementById('wifi-ip').textContent = data.wifi_ip || 'Not connected';
-    document.getElementById('eth-ip').textContent = data.eth_ip || 'Not connected';
-    document.getElementById('mac-address').textContent = data.mac || '--';
+    // Update IP addresses - ensure proper display even when data is missing
+    document.getElementById('wifi-ip').textContent = (data.wifi_connected && data.wifi_ip && data.wifi_ip !== '0.0.0.0') ? 
+        data.wifi_ip : 'Not connected';
+    
+    document.getElementById('eth-ip').textContent = (data.eth_connected && data.eth_ip && data.eth_ip !== '0.0.0.0') ? 
+        data.eth_ip : 'Not connected';
+    
+    // Ensure MAC address displays properly
+    const macAddress = data.mac || '';
+    document.getElementById('mac-address').textContent = 
+        (macAddress && macAddress !== '00:00:00:00:00:00') ? macAddress : '--';
+    
     document.getElementById('active-protocol').textContent = data.active_protocol || '--';
     
-    // Update network details if available
-    if (data.network) {
-        // Add any additional network details to dashboard
-        if (document.getElementById('network-mode')) {
-            let mode = 'Unknown';
-            if (data.eth_connected) mode = 'Ethernet';
-            else if (data.wifi_client_mode) mode = 'WiFi Client';
-            else if (data.wifi_ap_mode) mode = 'Access Point';
-            document.getElementById('network-mode').textContent = mode;
-        }
+    // Update network mode based on actual connections
+    let networkMode = 'Disconnected';
+    if (data.eth_connected) networkMode = 'Ethernet';
+    else if (data.wifi_client_mode) networkMode = 'WiFi Client';
+    else if (data.wifi_ap_mode) networkMode = 'Access Point';
+    
+    document.getElementById('network-mode').textContent = networkMode;
+    
+    // Generate and display device serial number
+    generateAndDisplaySerialNumber(data);
+}
+
+
+
+
+// Generate and display device serial number for dashboard
+function generateAndDisplaySerialNumber(data) {
+    const deviceIdElement = document.getElementById('device-id');
+    const serialNumberElement = document.getElementById('serial-number');
+    
+    if (!deviceIdElement || !serialNumberElement) return;
+    
+    // Generate device ID from MAC address (if available)
+    let deviceId = "unknown";
+    const macAddress = data.mac || '';
+    
+    if (macAddress && macAddress !== '--' && macAddress !== '00:00:00:00:00:00') {
+        // Create a unique ID by removing colons from MAC and taking last 6 chars
+        deviceId = macAddress.replace(/:/g, '').slice(-6).toUpperCase();
     }
+    
+    // Generate serial number format: KC868-A16-YYMMDD-XXXX where XXXX is the device ID
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2);
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    
+    const serialNumber = `KC868-A16-${year}${month}${day}-${deviceId}`;
+    
+    // Update elements
+    deviceIdElement.textContent = deviceId;
+    serialNumberElement.textContent = serialNumber;
 }
 
 // New function to monitor data freshness and ensure real-time updates
@@ -1047,7 +1087,8 @@ function refreshAnalogDisplay() {
     }
 }
 
-// Improved handleStatusUpdate function with better analog display handling
+
+// Improved handleStatusUpdate function with better network data handling
 function handleStatusUpdate(data) {
     // Update outputs
     if (data.outputs) {
@@ -1117,16 +1158,16 @@ function handleStatusUpdate(data) {
     }
     
     // Update HT sensors
-if (data.htSensors) {
-    // Store HT sensor data in systemData
-    if (!systemData.htSensors) {
-        systemData.htSensors = [];
+    if (data.htSensors) {
+        // Store HT sensor data in systemData
+        if (!systemData.htSensors) {
+            systemData.htSensors = [];
+        }
+        systemData.htSensors = data.htSensors;
+        
+        // Render the sensors in the UI
+        renderHTSensors(data.htSensors);
     }
-    systemData.htSensors = data.htSensors;
-    
-    // Render the sensors in the UI
-    renderHTSensors(data.htSensors);
-}
     
     // Update analog inputs with improved handling
     if (data.analog) {
@@ -1151,6 +1192,9 @@ if (data.htSensors) {
             refreshAnalogDisplay();
         }
     }
+    
+    // Update dashboard with the improved network information
+    updateDashboard(data);
     
     // Update time if provided
     if (data.time) {
@@ -4477,7 +4521,8 @@ function updateClock() {
     document.getElementById('current-time').textContent = timeString;
 }
 
-// Improved refreshSystemStatus function with better error handling and retry
+
+// Improved refreshSystemStatus function with better network data handling
 function refreshSystemStatus() {
     updateConnectionStatus(webSocketConnected ? 'connected' : 'connecting');
     
@@ -4505,116 +4550,25 @@ function refreshSystemStatus() {
                 document.getElementById('protocol-status').textContent = data.active_protocol.toUpperCase();
             }
             
-            // Update dashboard info
-            document.getElementById('device-name').textContent = data.device;
-            document.getElementById('system-uptime').textContent = data.uptime;
-            document.getElementById('wifi-ip').textContent = data.wifi_ip || 'Not connected';
-            document.getElementById('eth-ip').textContent = data.eth_ip || 'Not connected';
-            document.getElementById('mac-address').textContent = data.mac;
-            document.getElementById('active-protocol').textContent = data.active_protocol || '--';
-            
-            // Update firmware version
-            if (data.firmware_version) {
-                document.getElementById('firmware-version').textContent = data.firmware_version;
-                document.getElementById('firmware-version-display').textContent = data.firmware_version;
-            }
+            // Update dashboard with the complete data set
+            updateDashboard(data);
             
             // Update relay states
             if (data.outputs) {
                 data.outputs.forEach(output => {
                     updateRelayState(output.id, output.state);
                 });
-                
-                // Update active outputs list on dashboard
-                const activeOutputs = data.outputs.filter(output => output.state);
-                const activeOutputsElement = document.getElementById('active-outputs');
-                if (activeOutputsElement) {
-                    if (activeOutputs.length > 0) {
-                        activeOutputsElement.innerHTML = '';
-                        activeOutputs.forEach(output => {
-                            const div = document.createElement('div');
-                            div.className = 'input-item';
-                            div.textContent = `Relay ${output.id + 1}`;
-                            activeOutputsElement.appendChild(div);
-                        });
-                    } else {
-                        activeOutputsElement.innerHTML = '<p>No active outputs</p>';
-                    }
-                }
             }
             
-            // Update digital inputs - create if they don't exist
+            // Update digital inputs
             if (data.inputs) {
-                // First ensure the digital inputs grid exists and is populated
-                const digitalInputsGrid = document.getElementById('digital-inputs-grid');
-                if (digitalInputsGrid && digitalInputsGrid.children.length === 0) {
-                    for (let i = 0; i < 16; i++) {
-                        const inputItem = document.createElement('div');
-                        inputItem.className = 'input-item';
-                        inputItem.setAttribute('data-input', i);
-                        inputItem.innerHTML = `
-                            Input ${i+1}
-                            <div class="input-state"></div>
-                        `;
-                        digitalInputsGrid.appendChild(inputItem);
-                    }
-                }
-                
-                // Now update each input's state
                 data.inputs.forEach(input => {
                     updateInputState(input.id, input.state);
                 });
-                
-                // Update active inputs list on dashboard
-                const activeInputs = data.inputs.filter(input => input.state);
-                const activeInputsElement = document.getElementById('active-inputs');
-                if (activeInputsElement) {
-                    if (activeInputs.length > 0 || (data.direct_inputs && data.direct_inputs.some(i => i.state))) {
-                        activeInputsElement.innerHTML = '';
-                        
-                        // Add active digital inputs
-                        activeInputs.forEach(input => {
-                            const div = document.createElement('div');
-                            div.className = 'input-item';
-                            div.textContent = `Input ${input.id + 1}`;
-                            activeInputsElement.appendChild(div);
-                        });
-                        
-                        // Add active direct inputs
-                        if (data.direct_inputs) {
-                            data.direct_inputs
-                                .filter(input => input.state)
-                                .forEach(input => {
-                                    const div = document.createElement('div');
-                                    div.className = 'input-item';
-                                    div.textContent = `HT${input.id + 1}`;
-                                    activeInputsElement.appendChild(div);
-                                });
-                        }
-                    } else {
-                        activeInputsElement.innerHTML = '<p>No active inputs</p>';
-                    }
-                }
             }
             
-            // Update direct inputs - create if they don't exist
+            // Update direct inputs
             if (data.direct_inputs) {
-                // First ensure the direct inputs grid exists and is populated
-                const directInputsGrid = document.getElementById('direct-inputs-grid');
-                if (directInputsGrid && directInputsGrid.children.length === 0) {
-                    for (let i = 0; i < 3; i++) {
-                        const inputItem = document.createElement('div');
-                        inputItem.className = 'input-item';
-                        inputItem.setAttribute('data-input', 'ht' + i);
-                        inputItem.innerHTML = `
-                            HT${i+1}
-                            <div class="input-state"></div>
-                        `;
-                        directInputsGrid.appendChild(inputItem);
-                    }
-                }
-                
-                // Now update each direct input's state
                 data.direct_inputs.forEach(input => {
                     updateDirectInputState(input.id, input.state);
                 });
@@ -4625,46 +4579,13 @@ function refreshSystemStatus() {
                 renderHTSensors(data.htSensors);
             }
             
-            // Ensure the visual representations exist and are populated
-            if (!document.querySelector('.input-visual-grid .visual-item')) {
-                createVisualInputGrid();
-            }
-            
             // Update analog inputs
             if (data.analog) {
-                const analogInputsGrid = document.getElementById('analog-inputs-grid');
-                if (analogInputsGrid) {
-                    analogInputsGrid.innerHTML = '';
-                    data.analog.forEach(input => {
-                        const analogCard = document.createElement('div');
-                        analogCard.className = 'analog-card';
-                        analogCard.setAttribute('data-input', input.id);
-                        analogCard.innerHTML = `
-                            <div class="analog-header">
-                                <h4>A${input.id + 1}</h4>
-                                <span class="analog-value">${input.value} (${input.voltage.toFixed(2)}V)</span>
-                            </div>
-                            <div class="analog-percentage">${input.percentage}%</div>
-                            <div class="analog-progress">
-                                <div class="analog-fill" style="width: ${input.percentage}%"></div>
-                            </div>
-                        `;
-                        analogInputsGrid.appendChild(analogCard);
-                    });
-                }
-                
-                // Update analog chart
+                data.analog.forEach(input => {
+                    updateAnalogValue(input.id, input.value);
+                });
                 updateAnalogChart();
-                
-                // Update analog bar visualizations
-                updateAnalogVisualizations(data.analog);
             }
-            
-            // Update diagnostics data if available
-            document.getElementById('i2c-errors').textContent = data.i2c_errors || '0';
-            document.getElementById('last-error').textContent = data.last_error || 'None';
-            document.getElementById('free-heap').textContent = data.free_heap || 'Unknown';
-            document.getElementById('cpu-freq').textContent = data.cpu_freq || '240';
             
             // Try reconnecting WebSocket if not connected
             if (!webSocketConnected && reconnectAttempts < maxReconnectAttempts) {
@@ -5858,12 +5779,28 @@ function saveHTSensorConfig() {
         });
 }
 
-// Network settings functionality
+// Modified initNetworkUI function to refresh network status periodically
 function initNetworkUI() {
     console.log("Initializing Network UI");
     
-    // Load network settings
+    // Load network settings immediately
     fetchNetworkSettings();
+    
+    // Set up periodic refresh of network status when on network page
+    const refreshNetworkStatus = function() {
+        if (document.getElementById('network').classList.contains('active')) {
+            fetchNetworkSettings();
+        }
+    };
+    
+    // Refresh network status every 5 seconds when on network page
+    setInterval(refreshNetworkStatus, 5000);
+    
+    // Setup manual refresh button
+    const refreshNetworkBtn = document.getElementById('refresh-network');
+    if (refreshNetworkBtn) {
+        refreshNetworkBtn.addEventListener('click', fetchNetworkSettings);
+    }
     
     // Set up DHCP toggle
     const dhcpToggle = document.getElementById('network-dhcp-mode');
@@ -5895,49 +5832,56 @@ function initNetworkUI() {
     }
 }
 
-// Fetch network settings from server
+// Improved fetchNetworkSettings function to use system status data for network display
 function fetchNetworkSettings() {
-    fetch('/api/network/settings')
+    // Get system status data that includes network information
+    fetch('/api/status')
         .then(response => response.json())
         .then(data => {
+            // Use the complete system data to update network status display
+            updateNetworkStatusDisplay(data);
+            
             // Update DHCP mode toggle
             const dhcpToggle = document.getElementById('network-dhcp-mode');
             if (dhcpToggle) {
-                dhcpToggle.checked = data.dhcp_mode;
+                dhcpToggle.checked = data.dhcp_mode !== undefined ? data.dhcp_mode : true;
             }
             
             // Show/hide static settings
             const staticSettings = document.getElementById('network-static-settings');
             if (staticSettings) {
-                staticSettings.style.display = data.dhcp_mode ? 'none' : 'block';
+                staticSettings.style.display = data.dhcp_mode !== false ? 'none' : 'block';
             }
             
-            // Fill in static IP settings
-            if (!data.dhcp_mode) {
+            // Fill in static IP settings if available
+            if (data.network && !data.dhcp_mode) {
                 if (document.getElementById('network-ip')) {
-                    document.getElementById('network-ip').value = data.ip || '';
+                    document.getElementById('network-ip').value = 
+                        data.ip || data.network.eth_ip || data.network.wifi_ip || '';
                 }
                 if (document.getElementById('network-gateway')) {
-                    document.getElementById('network-gateway').value = data.gateway || '';
+                    document.getElementById('network-gateway').value = 
+                        data.gateway || data.network.eth_gateway || data.network.wifi_gateway || '';
                 }
                 if (document.getElementById('network-subnet')) {
-                    document.getElementById('network-subnet').value = data.subnet || '';
+                    document.getElementById('network-subnet').value = 
+                        data.subnet || data.network.eth_subnet || data.network.wifi_subnet || '255.255.255.0';
                 }
                 if (document.getElementById('network-dns1')) {
-                    document.getElementById('network-dns1').value = data.dns1 || '';
+                    document.getElementById('network-dns1').value = 
+                        data.dns1 || data.network.eth_dns1 || data.network.wifi_dns1 || '8.8.8.8';
                 }
                 if (document.getElementById('network-dns2')) {
-                    document.getElementById('network-dns2').value = data.dns2 || '';
+                    document.getElementById('network-dns2').value = 
+                        data.dns2 || data.network.eth_dns2 || data.network.wifi_dns2 || '8.8.4.4';
                 }
             }
             
             // Fill in WiFi settings
-            if (document.getElementById('network-wifi-ssid')) {
-                document.getElementById('network-wifi-ssid').value = data.wifi_ssid || '';
+            const wifiSsidField = document.getElementById('wifi-ssid');
+            if (wifiSsidField) {
+                wifiSsidField.value = data.wifi_ssid || '';
             }
-            
-            // Update current connection status
-            updateNetworkStatusDisplay(data);
         })
         .catch(error => {
             console.error('Error fetching network settings:', error);
@@ -5945,7 +5889,8 @@ function fetchNetworkSettings() {
         });
 }
 
-// Update network status display
+
+// Enhanced updateNetworkStatusDisplay function to properly show network information
 function updateNetworkStatusDisplay(data) {
     // Update WiFi status
     const wifiStatus = document.getElementById('network-wifi-status');
@@ -5956,6 +5901,7 @@ function updateNetworkStatusDisplay(data) {
                     <h4>WiFi Client Connected</h4>
                     <p><strong>SSID:</strong> ${data.wifi_ssid || 'Unknown'}</p>
                     <p><strong>IP:</strong> ${data.wifi_ip || 'Not assigned'}</p>
+                    <p><strong>MAC Address:</strong> ${data.mac || 'Unknown'}</p>
                     <p><strong>Gateway:</strong> ${data.wifi_gateway || 'Unknown'}</p>
                     <p><strong>Signal:</strong> ${data.wifi_rssi || '0'} dBm</p>
                 </div>
@@ -5964,8 +5910,9 @@ function updateNetworkStatusDisplay(data) {
             wifiStatus.innerHTML = `
                 <div class="status-card warning">
                     <h4>Access Point Mode Active</h4>
-                    <p><strong>SSID:</strong> KC868-A16</p>
-                    <p><strong>IP:</strong> ${data.wifi_ap_ip || '192.168.4.1'}</p>
+                    <p><strong>SSID:</strong> ${data.device || 'KC868-A16'}</p>
+                    <p><strong>IP:</strong> ${data.wifi_ip || '192.168.4.1'}</p>
+                    <p><strong>MAC Address:</strong> ${data.mac || 'Unknown'}</p>
                     <p><strong>WiFi Client Mode:</strong> Disconnected</p>
                 </div>
             `;
@@ -5974,6 +5921,7 @@ function updateNetworkStatusDisplay(data) {
                 <div class="status-card error">
                     <h4>WiFi Disconnected</h4>
                     <p>Not connected to any wireless network</p>
+                    <p><strong>MAC Address:</strong> ${data.mac || 'Unknown'}</p>
                 </div>
             `;
         }
@@ -5987,6 +5935,7 @@ function updateNetworkStatusDisplay(data) {
                 <div class="status-card success">
                     <h4>Ethernet Connected</h4>
                     <p><strong>IP:</strong> ${data.eth_ip || 'Not assigned'}</p>
+                    <p><strong>MAC Address:</strong> ${data.mac || 'Unknown'}</p>
                     <p><strong>Gateway:</strong> ${data.eth_gateway || 'Unknown'}</p>
                     <p><strong>Speed:</strong> ${data.eth_speed || 'Unknown'}</p>
                     <p><strong>Duplex:</strong> ${data.eth_duplex || 'Unknown'}</p>
@@ -6292,5 +6241,6 @@ function createDigitalHTSensorInputCheckboxes() {
         }
     }
 }
+
 
 

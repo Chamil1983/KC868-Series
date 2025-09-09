@@ -2423,7 +2423,8 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t l
     }
 }
 
-// Modify broadcastUpdate() function to include sensor data
+
+// Modify broadcastUpdate() function to include all network details
 void broadcastUpdate() {
     DynamicJsonDocument doc(4096);
     doc["type"] = "status_update";
@@ -2491,17 +2492,33 @@ void broadcastUpdate() {
         analogInput["id"] = i;
         analogInput["value"] = analogValues[i];
         analogInput["voltage"] = analogVoltages[i];
-        analogInput["percentage"] = map(analogValues[i], 0, 4095, 0, 100);
+        analogInput["percentage"] = calculatePercentage(analogVoltages[i]);
     }
 
     // Add system information
     doc["device"] = deviceName;
-    doc["wifi_connected"] = WiFi.status() == WL_CONNECTED;
+    doc["wifi_connected"] = wifiConnected;
+    doc["wifi_client_mode"] = wifiClientMode;
+    doc["wifi_ap_mode"] = apMode;
     doc["wifi_rssi"] = WiFi.RSSI();
-    doc["wifi_ip"] = WiFi.localIP().toString();
-    doc["eth_connected"] = ETH.linkUp();
-    doc["eth_ip"] = ETH.localIP().toString();
-    doc["mac"] = ETH.linkUp() ? ETH.macAddress() : WiFi.macAddress();
+    
+    // Make sure to correctly set the WiFi IP address
+    String wifiIpAddress = wifiClientMode ? WiFi.localIP().toString() : (apMode ? WiFi.softAPIP().toString() : "Not connected");
+    doc["wifi_ip"] = wifiIpAddress;
+    
+    doc["eth_connected"] = ethConnected;
+    doc["eth_ip"] = ethConnected ? ETH.localIP().toString() : "Not connected";
+    
+    // Set MAC address from appropriate source
+    String macAddress = "";
+    if (ethConnected) {
+        macAddress = ETH.macAddress();
+    } 
+    else if (wifiConnected) {
+        macAddress = wifiClientMode ? WiFi.macAddress() : WiFi.softAPmacAddress();
+    }
+    doc["mac"] = macAddress;
+    
     doc["uptime"] = getUptimeString();
     doc["active_protocol"] = getActiveProtocolName();
     doc["firmware_version"] = FIRMWARE_VERSION;
@@ -2509,6 +2526,9 @@ void broadcastUpdate() {
     doc["free_heap"] = ESP.getFreeHeap();
     doc["cpu_freq"] = ESP.getCpuFreqMHz();
     doc["last_error"] = lastErrorMessage;
+
+    // Add additional network info for better dashboard display
+    doc["network"] = true;  // Flag to indicate network info is available
 
     String jsonString;
     serializeJson(doc, jsonString);
@@ -3175,7 +3195,8 @@ void handleRelayControl() {
     server.send(200, "application/json", response);
 }
 
-// Enhanced handleSystemStatus to include network details
+
+// Improved handleSystemStatus function with better network data handling
 void handleSystemStatus() {
     DynamicJsonDocument doc(4096);
 
@@ -3245,14 +3266,61 @@ void handleSystemStatus() {
 
     // Add system information
     doc["device"] = deviceName;
+    doc["dhcp_mode"] = dhcpMode;
 
     // Add detailed network information
     doc["wifi_connected"] = wifiConnected;
     doc["wifi_client_mode"] = wifiClientMode;
     doc["wifi_ap_mode"] = apMode;
     doc["eth_connected"] = ethConnected;
+    doc["wifi_ssid"] = wifiSSID;
+    doc["wifi_rssi"] = WiFi.RSSI();
 
-    // Network details
+    // Make sure to correctly set the WiFi IP address
+    String wifiIpAddress = wifiClientMode ? WiFi.localIP().toString() : (apMode ? WiFi.softAPIP().toString() : "Not connected");
+    doc["wifi_ip"] = wifiIpAddress;
+    doc["eth_ip"] = ethConnected ? ETH.localIP().toString() : "Not connected";
+
+    // Set MAC address from appropriate source
+    String macAddress = "";
+    if (ethConnected) {
+        macAddress = ETH.macAddress();
+    } 
+    else if (wifiConnected) {
+        macAddress = wifiClientMode ? WiFi.macAddress() : WiFi.softAPmacAddress();
+    }
+    doc["mac"] = macAddress;
+
+    // Generate device ID from MAC (like in the JavaScript function)
+    String deviceId = "unknown";
+    if (macAddress.length() > 0 && macAddress != "00:00:00:00:00:00") {
+        // Remove colons and take last 6 characters
+        deviceId = macAddress;
+        deviceId.replace(":", "");
+        deviceId = deviceId.substring(deviceId.length() - 6);
+        deviceId.toUpperCase();
+    }
+    doc["device_id"] = deviceId;
+
+    // Generate serial number
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    char dateStr[9];
+    sprintf(dateStr, "%02d%02d%02d", (timeinfo.tm_year + 1900) % 100, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+    String serialNumber = /*String("KC868-A16-") +*/ String(dateStr) + "-" + deviceId;
+    doc["serial_number"] = serialNumber;
+
+    doc["uptime"] = getUptimeString();
+    doc["active_protocol"] = getActiveProtocolName();
+    doc["firmware_version"] = FIRMWARE_VERSION;
+    doc["i2c_errors"] = i2cErrorCount;
+    doc["free_heap"] = ESP.getFreeHeap();
+    doc["cpu_freq"] = ESP.getCpuFreqMHz();
+    doc["last_error"] = lastErrorMessage;
+
+    // Network details in a nested object
     JsonObject networkDetails = doc.createNestedObject("network");
     networkDetails["dhcp_mode"] = dhcpMode;
 
@@ -3288,23 +3356,52 @@ void handleSystemStatus() {
         networkDetails["eth_duplex"] = ETH.fullDuplex() ? "Full" : "Half";
     }
 
-    // Basic system info
-    doc["mac"] = ethConnected ? ETH.macAddress() : WiFi.macAddress();
-    doc["uptime"] = getUptimeString();
-    doc["active_protocol"] = getActiveProtocolName();
-    doc["firmware_version"] = FIRMWARE_VERSION;
-    doc["i2c_errors"] = i2cErrorCount;
-    doc["free_heap"] = ESP.getFreeHeap();
-    doc["cpu_freq"] = ESP.getCpuFreqMHz();
-    doc["last_error"] = lastErrorMessage;
-
-    // Add network status to display on dashboard
+    // Add flag indicating network info is available
     doc["rtc_initialized"] = rtcInitialized;
+    doc["network"] = true;
 
     String jsonResponse;
     serializeJson(doc, jsonResponse);
 
     server.send(200, "application/json", jsonResponse);
+}
+
+// Function to generate and display a device serial number
+void generateAndDisplaySerialNumber() {
+    // Get current time
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    
+    // Format date as YYMMDD
+    char dateStr[9];
+    sprintf(dateStr, "%02d%02d%02d", (timeinfo.tm_year + 1900) % 100, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+    
+    // Get MAC address from appropriate source
+    String macAddress = "";
+    if (ethConnected) {
+        macAddress = ETH.macAddress();
+    } 
+    else if (wifiConnected) {
+        macAddress = wifiClientMode ? WiFi.macAddress() : WiFi.softAPmacAddress();
+    }
+    
+    // Generate device ID from MAC
+    String deviceId = "unknown";
+    if (macAddress.length() > 0 && macAddress != "00:00:00:00:00:00") {
+        // Remove colons and take last 6 characters
+        deviceId = macAddress;
+        deviceId.replace(":", "");
+        deviceId = deviceId.substring(deviceId.length() - 6);
+        deviceId.toUpperCase();
+    }
+    
+    // Generate serial number format: KC868-A16-YYMMDD-XXXX where XXXX is the device ID
+    String serialNumber = /*String("KC868-A16-") +*/ String(dateStr) + "-" + deviceId;
+    
+    debugPrintln("Device ID: " + deviceId);
+    debugPrintln("Serial Number: " + serialNumber);
 }
 
 // Enhanced Network Settings handler
