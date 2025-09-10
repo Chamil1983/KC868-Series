@@ -159,8 +159,7 @@ RCSwitch rfTransmitter = RCSwitch();
 // RTC object
 RTC_DS3231 rtc;
 
-// Alexa integration object
-AlexaHandler alexaHandler;
+// Note: AlexaHandler instance is defined in src/AlexaHandler.cpp
 
 
 // Objects for sensors

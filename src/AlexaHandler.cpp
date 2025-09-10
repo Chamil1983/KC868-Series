@@ -21,6 +21,9 @@ String deviceNames[16] = {
     "Relay 13", "Relay 14", "Relay 15", "Relay 16"
 };
 
+// Global instance definition
+AlexaHandler alexaHandler;
+
 // Constructor
 AlexaHandler::AlexaHandler() {
     _initialized = false;
