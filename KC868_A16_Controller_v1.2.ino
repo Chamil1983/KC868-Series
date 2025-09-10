@@ -53,6 +53,8 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <DHT.h>
+#include <fauxmoESP.h>
+#include "src/AlexaHandler.h"
 
 // I2C PCF8574 addresses
 #define PCF8574_INPUTS_1_8    0x22
@@ -156,6 +158,9 @@ RCSwitch rfTransmitter = RCSwitch();
 
 // RTC object
 RTC_DS3231 rtc;
+
+// Alexa integration object
+AlexaHandler alexaHandler;
 
 
 // Objects for sensors
