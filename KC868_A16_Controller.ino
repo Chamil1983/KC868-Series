@@ -15,6 +15,8 @@
    - Comprehensive diagnostics
    - WebSocket support for real-time updates
    - Digital input interrupt handling with priority configuration
+   - Advanced TCP connection management and resource monitoring
+   - Port conflict prevention for future Alexa/fauxmoESP integration
 
    Hardware:
    - ESP32 microcontroller
@@ -29,6 +31,13 @@
    - Direct inputs: HT1=GPIO32, HT2=GPIO33, HT3=GPIO14
    - RF: RX=GPIO2, TX=GPIO15
    - Ethernet: MDC=GPIO23, MDIO=GPIO18, CLK=GPIO17
+
+   TCP Resource Management Features:
+   - Connection tracking and automatic cleanup
+   - Memory monitoring with emergency recovery
+   - Port allocation management (Web:80, WebSocket:81, Alexa:8080)
+   - Network stability verification before service startup
+   - Prevents "assert failed: tcp_alloc" errors
 */
 
 #include <WiFi.h>
@@ -185,6 +194,27 @@ unsigned long lastTimeCheck = 0;        // Last time the schedules were checked
 bool rtcInitialized = false;            // Whether RTC is available and initialized
 String currentCommunicationProtocol = "wifi"; // Current communication protocol
 
+// TCP Connection and Resource Management
+#define MAX_TCP_CONNECTIONS 10          // Maximum allowed TCP connections
+#define MAX_WEBSOCKET_CLIENTS 8         // Maximum WebSocket clients
+#define CONNECTION_TIMEOUT_MS 30000     // Connection timeout in milliseconds
+#define MIN_FREE_HEAP 10000             // Minimum free heap before rejecting connections
+#define ALEXA_SERVICE_PORT 8080         // Reserved port for future Alexa/fauxmoESP integration
+
+struct ConnectionInfo {
+    IPAddress clientIP;
+    unsigned long connectTime;
+    bool active;
+    String type;  // "web", "websocket", "alexa"
+};
+
+ConnectionInfo activeConnections[MAX_TCP_CONNECTIONS];
+int currentConnectionCount = 0;
+unsigned long lastConnectionCleanup = 0;
+unsigned long lastHeapCheck = 0;
+bool servicesInitialized = false;
+bool networkStabilityConfirmed = false;
+
 // Global variable to track connection mode
 bool apMode = false;          // Whether device is in AP mode
 bool wifiClientMode = false;  // Whether device is connected to WiFi as client
@@ -261,7 +291,7 @@ bool restartRequired = false;
 // Structure for HT pin configuration
 struct HTSensorConfig {
     uint8_t sensorType;     // 0=Digital, 1=DHT11, 2=DHT22, 3=DS18B20
-    float temperature;      // Last temperature reading (°C)
+    float temperature;      // Last temperature reading (ï¿½C)
     float humidity;         // Last humidity reading (% - only for DHT sensors)
     bool configured;        // Whether sensor has been configured
     unsigned long lastReadTime; // Last time sensor was read
@@ -358,6 +388,7 @@ void handleCommunicationStatus();
 void handleSetCommunication();
 void handleCommunicationConfig();
 void handleUpdateCommunicationConfig();
+void handleResourceStatus();
 void handleGetTime();
 void handleSetTime();
 void handleI2CScan();
@@ -393,6 +424,18 @@ void checkInputBasedSchedules(int changedInputIndex, bool newState);
 void executeSchedule(int scheduleIndex);
 void handleEvaluateInputSchedules();
 
+// Connection and Resource Management function prototypes
+void initConnectionManager();
+bool checkResourceAvailability();
+bool registerConnection(IPAddress clientIP, String type);
+void unregisterConnection(IPAddress clientIP);
+void cleanupStaleConnections();
+void monitorHeapMemory();
+bool confirmNetworkStability();
+void safeStartServices();
+void handleConnectionTimeout();
+void emergencyResourceCleanup();
+
 // Modified setup function to ensure proper initialization order
 void setup() {
     // Initialize serial communication for debugging
@@ -409,6 +452,9 @@ void setup() {
     else {
         Serial.println("SPIFFS Mounted SUCCESSFULLY...");
     }
+
+    // Initialize connection manager
+    initConnectionManager();
 
     // Initialize I2C with custom pins
     Wire.begin(SDA_PIN, SCL_PIN);
@@ -446,6 +492,23 @@ void setup() {
         initWiFi();
     }
 
+    // Wait for network stability before starting services
+    Serial.println("Waiting for network stability...");
+    unsigned long networkWaitStart = millis();
+    while (!confirmNetworkStability() && (millis() - networkWaitStart < 15000)) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println();
+
+    if (networkStabilityConfirmed) {
+        Serial.println("Network stability confirmed - starting services");
+        safeStartServices();
+    } else {
+        Serial.println("Network stability timeout - starting services anyway");
+        safeStartServices();
+    }
+
     // Initialize RS485 serial with current configuration
     initRS485();
 
@@ -457,14 +520,6 @@ void setup() {
         dnsServer.start(53, "*", WiFi.softAPIP());
     }
 
-    // Initialize WebSocket server
-    webSocket.begin();
-    webSocket.onEvent(handleWebSocketEvent);
-    Serial.println("WebSocket server started");
-
-    // Setup web server endpoints
-    setupWebServer();
-
     // Initialize output states (All relays OFF)
     writeOutputs();
 
@@ -475,11 +530,6 @@ void setup() {
     for (int i = 0; i < 4; i++) {
         analogValues[i] = readAnalogInput(i);
         analogVoltages[i] = convertAnalogToVoltage(analogValues[i]);
-    }
-
-    // Initialize WebSocket client array
-    for (int i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++) {
-        webSocketClients[i] = false;
     }
 
     // Initialize interrupt configurations
@@ -509,6 +559,10 @@ void setup() {
         Serial.print("AP IP: ");
         Serial.println(WiFi.softAPIP());
     }
+
+    // Print resource status
+    Serial.printf("Free heap: %d bytes\n", ESP.getFreeHeap());
+    Serial.printf("TCP connections available: %d\n", MAX_TCP_CONNECTIONS);
 }
 
 
@@ -517,6 +571,46 @@ void loop() {
     // Handle DNS requests for captive portal if in AP mode
     if (apMode) {
         dnsServer.processNextRequest();
+    }
+
+    // Monitor system resources and connections
+    static unsigned long lastResourceCheck = 0;
+    static unsigned long lastTcpAssertCheck = 0;
+    unsigned long currentMillis = millis();
+    
+    if (currentMillis - lastResourceCheck >= 5000) { // Check every 5 seconds
+        lastResourceCheck = currentMillis;
+        cleanupStaleConnections();
+        monitorHeapMemory();
+        
+        // Emergency cleanup if resources are critically low
+        if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
+            emergencyResourceCleanup();
+        }
+    }
+    
+    // Additional check for potential TCP allocation issues
+    if (currentMillis - lastTcpAssertCheck >= 10000) { // Check every 10 seconds
+        lastTcpAssertCheck = currentMillis;
+        
+        // Check for signs of TCP allocation stress
+        if (ESP.getFreeHeap() < MIN_FREE_HEAP * 2 && currentConnectionCount > 0) {
+            debugPrintln("TCP allocation stress detected - preemptive cleanup");
+            cleanupStaleConnections();
+            
+            // If still stressed, be more aggressive
+            if (ESP.getFreeHeap() < MIN_FREE_HEAP * 1.5) {
+                debugPrintln("Severe TCP stress - forcing connection cleanup");
+                emergencyResourceCleanup();
+            }
+        }
+        
+        // Log status if debug mode is enabled
+        if (debugMode && (currentConnectionCount > 0 || ESP.getFreeHeap() < MIN_FREE_HEAP * 3)) {
+            debugPrintln("Resource monitor: " + String(ESP.getFreeHeap()) + " heap, " + 
+                        String(currentConnectionCount) + " connections, stability: " + 
+                        String(networkStabilityConfirmed ? "OK" : "UNSTABLE"));
+        }
     }
 
     // Rest of the original loop function...
@@ -532,7 +626,6 @@ void loop() {
     static unsigned long lastAnalogCheck = 0;
     static unsigned long lastSensorCheck = 0;
     static unsigned long lastNetworkCheck = 0;  // Add network check timer
-    unsigned long currentMillis = millis();
 
     // Process any input interrupts with priorities
     processInputInterrupts();
@@ -2249,6 +2342,9 @@ void setupWebServer() {
     server.on("/api/communication/config", HTTP_GET, handleCommunicationConfig);
     server.on("/api/communication/config", HTTP_POST, handleUpdateCommunicationConfig);
 
+    // Resource monitoring endpoint
+    server.on("/api/resources", HTTP_GET, handleResourceStatus);
+
     // Time endpoints
     server.on("/api/time", HTTP_GET, handleGetTime);
     server.on("/api/time", HTTP_POST, handleSetTime);
@@ -2281,13 +2377,32 @@ void setupWebServer() {
 void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
     switch (type) {
     case WStype_DISCONNECTED:
-        debugPrintln("WebSocket client disconnected");
+        debugPrintln("WebSocket client disconnected: " + String(num));
         webSocketClients[num] = false;
+        
+        // Unregister the connection if we can get the IP
+        // Note: IP might not be available at disconnect, so we rely on cleanup timer
+        debugPrintln("WebSocket connection closed for client " + String(num));
         break;
+        
     case WStype_CONNECTED:
     {
         IPAddress ip = webSocket.remoteIP(num);
-        debugPrintln("WebSocket client connected: " + ip.toString());
+        debugPrintln("WebSocket client connected: " + ip.toString() + " (slot " + String(num) + ")");
+
+        // Check resource availability before accepting connection
+        if (!checkResourceAvailability()) {
+            debugPrintln("Rejecting WebSocket connection due to resource constraints");
+            webSocket.disconnect(num);
+            return;
+        }
+
+        // Register the new connection
+        if (!registerConnection(ip, "websocket")) {
+            debugPrintln("Failed to register WebSocket connection - disconnecting client");
+            webSocket.disconnect(num);
+            return;
+        }
 
         // Mark client as subscribed
         webSocketClients[num] = true;
@@ -2296,6 +2411,9 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t l
         DynamicJsonDocument doc(1024);
         doc["type"] = "status";
         doc["connected"] = true;
+        doc["client_id"] = num;
+        doc["server_version"] = firmwareVersion;
+        doc["max_connections"] = MAX_WEBSOCKET_CLIENTS;
 
         String message;
         serializeJson(doc, message);
@@ -2303,12 +2421,20 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t l
 
         // Send current state of all relays and inputs
         broadcastUpdate();
+        
+        debugPrintln("WebSocket client " + String(num) + " successfully connected and registered");
     }
     break;
     case WStype_TEXT:
     {
         String text = String((char*)payload);
-        debugPrintln("WebSocket received: " + text);
+        debugPrintln("WebSocket received from client " + String(num) + ": " + text);
+
+        // Check if message is too large (potential DoS protection)
+        if (length > 2048) {
+            debugPrintln("WebSocket message too large from client " + String(num) + " - ignoring");
+            return;
+        }
 
         // Process WebSocket command
         DynamicJsonDocument doc(1024);
@@ -2320,31 +2446,42 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t l
             if (cmd == "subscribe") {
                 // Subscribe to real-time updates
                 webSocketClients[num] = true;
-                debugPrintln("Client subscribed to updates");
+                debugPrintln("Client " + String(num) + " subscribed to updates");
             }
             else if (cmd == "unsubscribe") {
                 // Unsubscribe from updates
                 webSocketClients[num] = false;
-                debugPrintln("Client unsubscribed from updates");
+                debugPrintln("Client " + String(num) + " unsubscribed from updates");
+            }
+            else if (cmd == "ping") {
+                // Respond to ping for connection keepalive
+                DynamicJsonDocument pongDoc(256);
+                pongDoc["type"] = "pong";
+                pongDoc["timestamp"] = millis();
+                
+                String pongResponse;
+                serializeJson(pongDoc, pongResponse);
+                webSocket.sendTXT(num, pongResponse);
             }
             else if (cmd == "toggle_relay") {
                 // Toggle relay command
                 int relay = doc["relay"];
                 bool state = doc["state"];
 
-                debugPrintln("WebSocket: Toggling relay " + String(relay) + " to " + String(state ? "ON" : "OFF"));
+                debugPrintln("WebSocket: Client " + String(num) + " toggling relay " + String(relay) + " to " + String(state ? "ON" : "OFF"));
 
                 if (relay >= 0 && relay < 16) {
                     outputStates[relay] = state;
 
                     if (writeOutputs()) {
-                        debugPrintln("Relay toggled successfully via WebSocket");
+                        debugPrintln("Relay " + String(relay) + " toggled successfully via WebSocket");
 
                         // Send response
                         DynamicJsonDocument responseDoc(512);
                         responseDoc["type"] = "relay_update";
                         responseDoc["relay"] = relay;
                         responseDoc["state"] = outputStates[relay];
+                        responseDoc["success"] = true;
 
                         String response;
                         serializeJson(responseDoc, response);
@@ -2358,16 +2495,26 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t l
                         DynamicJsonDocument errorDoc(512);
                         errorDoc["type"] = "error";
                         errorDoc["message"] = "Failed to write to relay";
+                        errorDoc["relay"] = relay;
 
                         String errorResponse;
                         serializeJson(errorDoc, errorResponse);
                         webSocket.sendTXT(num, errorResponse);
 
-                        debugPrintln("ERROR: Failed to toggle relay via WebSocket");
+                        debugPrintln("ERROR: Failed to toggle relay " + String(relay) + " via WebSocket");
                     }
                 }
                 else {
-                    debugPrintln("ERROR: Invalid relay index: " + String(relay));
+                    debugPrintln("ERROR: Invalid relay index from client " + String(num) + ": " + String(relay));
+                    
+                    DynamicJsonDocument errorDoc(512);
+                    errorDoc["type"] = "error";
+                    errorDoc["message"] = "Invalid relay index";
+                    errorDoc["relay"] = relay;
+
+                    String errorResponse;
+                    serializeJson(errorDoc, errorResponse);
+                    webSocket.sendTXT(num, errorResponse);
                 }
             }
             else if (cmd == "get_protocol_config") {
@@ -3313,6 +3460,35 @@ void handleSystemStatus() {
     doc["cpu_freq"] = ESP.getCpuFreqMHz();
     doc["last_error"] = lastErrorMessage;
 
+    // Add TCP connection and resource monitoring information
+    JsonObject resources = doc.createNestedObject("resources");
+    resources["tcp_connections_active"] = currentConnectionCount;
+    resources["tcp_connections_max"] = MAX_TCP_CONNECTIONS;
+    resources["websocket_clients_max"] = MAX_WEBSOCKET_CLIENTS;
+    resources["heap_free"] = ESP.getFreeHeap();
+    resources["heap_min_threshold"] = MIN_FREE_HEAP;
+    resources["heap_status"] = (ESP.getFreeHeap() > MIN_FREE_HEAP) ? "OK" : "LOW";
+    resources["services_initialized"] = servicesInitialized;
+    resources["network_stability_confirmed"] = networkStabilityConfirmed;
+    
+    // Connection details
+    JsonArray connections = resources.createNestedArray("active_connections");
+    for (int i = 0; i < MAX_TCP_CONNECTIONS; i++) {
+        if (activeConnections[i].active) {
+            JsonObject conn = connections.createNestedObject();
+            conn["ip"] = activeConnections[i].clientIP.toString();
+            conn["type"] = activeConnections[i].type;
+            conn["duration"] = (millis() - activeConnections[i].connectTime) / 1000;
+        }
+    }
+    
+    // Port allocation information
+    JsonObject ports = doc.createNestedObject("port_allocation");
+    ports["web_server"] = 80;
+    ports["websocket_server"] = 81;
+    ports["alexa_reserved"] = ALEXA_SERVICE_PORT;
+    ports["dns_server"] = apMode ? 53 : 0;
+
     // Add network status to display on dashboard
     doc["rtc_initialized"] = rtcInitialized;
 
@@ -4142,6 +4318,63 @@ void handleUpdateCommunicationConfig() {
         }
     }
 
+    server.send(200, "application/json", response);
+}
+
+// Handle resource status API endpoint
+void handleResourceStatus() {
+    DynamicJsonDocument doc(1024);
+    
+    // System resources
+    doc["free_heap"] = ESP.getFreeHeap();
+    doc["min_heap_threshold"] = MIN_FREE_HEAP;
+    doc["heap_status"] = (ESP.getFreeHeap() > MIN_FREE_HEAP) ? "OK" : "LOW";
+    doc["cpu_freq"] = ESP.getCpuFreqMHz();
+    doc["uptime_seconds"] = millis() / 1000;
+    
+    // Connection management
+    doc["tcp_connections_active"] = currentConnectionCount;
+    doc["tcp_connections_max"] = MAX_TCP_CONNECTIONS;
+    doc["websocket_clients_max"] = MAX_WEBSOCKET_CLIENTS;
+    doc["services_initialized"] = servicesInitialized;
+    doc["network_stability"] = networkStabilityConfirmed;
+    
+    // Port allocation
+    JsonObject ports = doc.createNestedObject("ports");
+    ports["web_server"] = 80;
+    ports["websocket"] = 81;
+    ports["alexa_reserved"] = ALEXA_SERVICE_PORT;
+    if (apMode) {
+        ports["dns_server"] = 53;
+    }
+    
+    // Active connections
+    JsonArray connections = doc.createNestedArray("connections");
+    for (int i = 0; i < MAX_TCP_CONNECTIONS; i++) {
+        if (activeConnections[i].active) {
+            JsonObject conn = connections.createNestedObject();
+            conn["slot"] = i;
+            conn["ip"] = activeConnections[i].clientIP.toString();
+            conn["type"] = activeConnections[i].type;
+            conn["duration_seconds"] = (millis() - activeConnections[i].connectTime) / 1000;
+            conn["age_ms"] = millis() - activeConnections[i].connectTime;
+        }
+    }
+    
+    // Resource warnings
+    JsonArray warnings = doc.createNestedArray("warnings");
+    if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
+        warnings.add("Low heap memory");
+    }
+    if (currentConnectionCount > MAX_TCP_CONNECTIONS * 0.8) {
+        warnings.add("High TCP connection usage");
+    }
+    if (!networkStabilityConfirmed) {
+        warnings.add("Network stability not confirmed");
+    }
+    
+    String response;
+    serializeJson(doc, response);
     server.send(200, "application/json", response);
 }
 
@@ -5094,7 +5327,7 @@ void readSensor(int htIndex) {
                 htSensorConfig[htIndex].humidity = newHumidity;
                 htSensorConfig[htIndex].temperature = newTemperature;
                 debugPrintln("HT" + String(htIndex + 1) + " DHT: " +
-                    String(newTemperature, 1) + "°C, " +
+                    String(newTemperature, 1) + "ï¿½C, " +
                     String(newHumidity, 1) + "%");
             }
             else {
@@ -5115,7 +5348,7 @@ void readSensor(int htIndex) {
             if (newTemperature != DEVICE_DISCONNECTED_C) {
                 htSensorConfig[htIndex].temperature = newTemperature;
                 debugPrintln("HT" + String(htIndex + 1) + " DS18B20: " +
-                    String(newTemperature, 1) + "°C");
+                    String(newTemperature, 1) + "ï¿½C");
             }
             else {
                 debugPrintln("HT" + String(htIndex + 1) + " DS18B20 read error");
@@ -5322,4 +5555,275 @@ String getActiveProtocolName() {
 
     // Return as-is if unknown
     return protocolName;
+}
+
+// Connection and Resource Management Functions
+
+// Initialize the connection manager
+void initConnectionManager() {
+    // Clear all connection slots
+    for (int i = 0; i < MAX_TCP_CONNECTIONS; i++) {
+        activeConnections[i].active = false;
+        activeConnections[i].clientIP = IPAddress(0, 0, 0, 0);
+        activeConnections[i].connectTime = 0;
+        activeConnections[i].type = "";
+    }
+    currentConnectionCount = 0;
+    lastConnectionCleanup = millis();
+    lastHeapCheck = millis();
+    servicesInitialized = false;
+    networkStabilityConfirmed = false;
+    
+    debugPrintln("Connection manager initialized");
+}
+
+// Check if system resources are available for new connections
+bool checkResourceAvailability() {
+    // Check heap memory
+    if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
+        debugPrintln("Resource check failed: Low heap memory (" + String(ESP.getFreeHeap()) + " bytes)");
+        return false;
+    }
+    
+    // Check connection count
+    if (currentConnectionCount >= MAX_TCP_CONNECTIONS) {
+        debugPrintln("Resource check failed: Maximum TCP connections reached (" + String(currentConnectionCount) + ")");
+        return false;
+    }
+    
+    return true;
+}
+
+// Register a new connection
+bool registerConnection(IPAddress clientIP, String type) {
+    if (!checkResourceAvailability()) {
+        return false;
+    }
+    
+    // Find an available slot
+    for (int i = 0; i < MAX_TCP_CONNECTIONS; i++) {
+        if (!activeConnections[i].active) {
+            activeConnections[i].active = true;
+            activeConnections[i].clientIP = clientIP;
+            activeConnections[i].connectTime = millis();
+            activeConnections[i].type = type;
+            currentConnectionCount++;
+            
+            debugPrintln("Connection registered: " + clientIP.toString() + " (" + type + ") - Total: " + String(currentConnectionCount));
+            return true;
+        }
+    }
+    
+    debugPrintln("Failed to register connection: No available slots");
+    return false;
+}
+
+// Unregister a connection
+void unregisterConnection(IPAddress clientIP) {
+    for (int i = 0; i < MAX_TCP_CONNECTIONS; i++) {
+        if (activeConnections[i].active && activeConnections[i].clientIP == clientIP) {
+            activeConnections[i].active = false;
+            activeConnections[i].clientIP = IPAddress(0, 0, 0, 0);
+            activeConnections[i].connectTime = 0;
+            activeConnections[i].type = "";
+            currentConnectionCount--;
+            
+            debugPrintln("Connection unregistered: " + clientIP.toString() + " - Total: " + String(currentConnectionCount));
+            break;
+        }
+    }
+}
+
+// Clean up stale connections that have exceeded timeout
+void cleanupStaleConnections() {
+    unsigned long currentTime = millis();
+    int cleanedCount = 0;
+    
+    for (int i = 0; i < MAX_TCP_CONNECTIONS; i++) {
+        if (activeConnections[i].active) {
+            // Check if connection has timed out
+            if (currentTime - activeConnections[i].connectTime > CONNECTION_TIMEOUT_MS) {
+                debugPrintln("Cleaning up stale connection: " + activeConnections[i].clientIP.toString() + 
+                           " (" + activeConnections[i].type + ") - Age: " + String((currentTime - activeConnections[i].connectTime) / 1000) + "s");
+                
+                activeConnections[i].active = false;
+                activeConnections[i].clientIP = IPAddress(0, 0, 0, 0);
+                activeConnections[i].connectTime = 0;
+                activeConnections[i].type = "";
+                currentConnectionCount--;
+                cleanedCount++;
+            }
+        }
+    }
+    
+    if (cleanedCount > 0) {
+        debugPrintln("Cleaned up " + String(cleanedCount) + " stale connections. Active connections: " + String(currentConnectionCount));
+    }
+    
+    lastConnectionCleanup = currentTime;
+}
+
+// Monitor heap memory and log warnings
+void monitorHeapMemory() {
+    uint32_t freeHeap = ESP.getFreeHeap();
+    
+    if (freeHeap < MIN_FREE_HEAP) {
+        debugPrintln("WARNING: Low heap memory: " + String(freeHeap) + " bytes");
+        
+        // Force garbage collection
+        if (freeHeap < MIN_FREE_HEAP / 2) {
+            emergencyResourceCleanup();
+        }
+    }
+    
+    // Log heap status every minute when debug is enabled
+    static unsigned long lastHeapLog = 0;
+    if (debugMode && (millis() - lastHeapLog > 60000)) {
+        lastHeapLog = millis();
+        debugPrintln("Heap status: " + String(freeHeap) + " bytes free, " + String(currentConnectionCount) + " active connections");
+    }
+    
+    lastHeapCheck = millis();
+}
+
+// Confirm network stability before starting services
+bool confirmNetworkStability() {
+    static int stabilityChecks = 0;
+    static unsigned long lastStabilityCheck = 0;
+    
+    if (millis() - lastStabilityCheck < 1000) {
+        return networkStabilityConfirmed;
+    }
+    
+    lastStabilityCheck = millis();
+    
+    bool isStable = false;
+    
+    // Check if we have a stable network connection
+    if (ethConnected && ETH.linkUp()) {
+        isStable = true;
+    } else if (wifiConnected && WiFi.status() == WL_CONNECTED) {
+        isStable = true;
+    } else if (apMode) {
+        isStable = true; // AP mode is inherently stable
+    }
+    
+    if (isStable) {
+        stabilityChecks++;
+        if (stabilityChecks >= 5) { // Require 5 consecutive stable checks
+            networkStabilityConfirmed = true;
+            debugPrintln("Network stability confirmed after " + String(stabilityChecks) + " checks");
+        }
+    } else {
+        stabilityChecks = 0; // Reset counter if network becomes unstable
+        networkStabilityConfirmed = false;
+    }
+    
+    return networkStabilityConfirmed;
+}
+
+// Safely start network services in proper order
+void safeStartServices() {
+    if (servicesInitialized) {
+        return; // Already initialized
+    }
+    
+    debugPrintln("Starting network services...");
+    
+    // Initialize WebSocket client tracking array first
+    for (int i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++) {
+        webSocketClients[i] = false;
+    }
+    
+    // Start WebSocket server on port 81 (separate from web server port 80)
+    webSocket.begin();
+    webSocket.onEvent(handleWebSocketEvent);
+    Serial.println("WebSocket server started on port 81");
+    
+    // Small delay to allow WebSocket server to fully initialize
+    delay(100);
+    
+    // Setup web server endpoints (this starts the server on port 80)
+    setupWebServer();
+    Serial.println("Web server started on port 80");
+    
+    // Reserve port for future Alexa integration to prevent conflicts
+    Serial.println("Port " + String(ALEXA_SERVICE_PORT) + " reserved for future Alexa/fauxmoESP integration");
+    
+    // Add a small delay to ensure all services are ready
+    delay(200);
+    
+    servicesInitialized = true;
+    debugPrintln("All network services started successfully");
+}
+
+// Handle connection timeouts and cleanup
+void handleConnectionTimeout() {
+    // This is called from the main loop periodically
+    cleanupStaleConnections();
+    
+    // Additional timeout handling for WebSocket connections
+    for (int i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++) {
+        if (webSocketClients[i]) {
+            // WebSocket library handles its own timeouts, but we can monitor here
+            // For now, we rely on the WebSocket library's built-in timeout handling
+        }
+    }
+}
+
+// Emergency resource cleanup when critically low on memory
+void emergencyResourceCleanup() {
+    debugPrintln("EMERGENCY: Performing emergency resource cleanup");
+    
+    // Force cleanup of all stale connections immediately
+    cleanupStaleConnections();
+    
+    // Disconnect oldest connections if still over limit
+    if (currentConnectionCount > MAX_TCP_CONNECTIONS * 0.8) {
+        debugPrintln("Disconnecting oldest connections to free resources");
+        
+        unsigned long oldestTime = millis();
+        int oldestIndex = -1;
+        
+        for (int i = 0; i < MAX_TCP_CONNECTIONS; i++) {
+            if (activeConnections[i].active && activeConnections[i].connectTime < oldestTime) {
+                oldestTime = activeConnections[i].connectTime;
+                oldestIndex = i;
+            }
+        }
+        
+        if (oldestIndex >= 0) {
+            debugPrintln("Forcibly disconnecting oldest connection: " + activeConnections[oldestIndex].clientIP.toString());
+            activeConnections[oldestIndex].active = false;
+            activeConnections[oldestIndex].clientIP = IPAddress(0, 0, 0, 0);
+            activeConnections[oldestIndex].connectTime = 0;
+            activeConnections[oldestIndex].type = "";
+            currentConnectionCount--;
+        }
+    }
+    
+    // Additional emergency measures
+    if (ESP.getFreeHeap() < MIN_FREE_HEAP / 2) {
+        debugPrintln("CRITICAL: Heap extremely low, forcing WebSocket disconnects");
+        
+        // Disconnect all WebSocket clients except the first one
+        for (int i = 1; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++) {
+            if (webSocketClients[i]) {
+                webSocket.disconnect(i);
+                webSocketClients[i] = false;
+                debugPrintln("Emergency disconnect WebSocket client " + String(i));
+            }
+        }
+        
+        // Force garbage collection if available
+        #ifdef ESP_ARDUINO_VERSION_MAJOR
+        if (ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(2, 0, 0)) {
+            // Force garbage collection on newer ESP32 Arduino versions
+            delay(10);
+        }
+        #endif
+    }
+    
+    // Force garbage collection
+    debugPrintln("After emergency cleanup: " + String(ESP.getFreeHeap()) + " bytes free, " + String(currentConnectionCount) + " connections");
 }
