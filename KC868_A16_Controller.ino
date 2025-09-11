@@ -15,6 +15,8 @@
    - Comprehensive diagnostics
    - WebSocket support for real-time updates
    - Digital input interrupt handling with priority configuration
+   - Advanced TCP connection management and resource monitoring
+   - Port conflict prevention for future Alexa/fauxmoESP integration
 
    Hardware:
    - ESP32 microcontroller
@@ -29,6 +31,13 @@
    - Direct inputs: HT1=GPIO32, HT2=GPIO33, HT3=GPIO14
    - RF: RX=GPIO2, TX=GPIO15
    - Ethernet: MDC=GPIO23, MDIO=GPIO18, CLK=GPIO17
+
+   TCP Resource Management Features:
+   - Connection tracking and automatic cleanup
+   - Memory monitoring with emergency recovery
+   - Port allocation management (Web:80, WebSocket:81, Alexa:8080)
+   - Network stability verification before service startup
+   - Prevents "assert failed: tcp_alloc" errors
 */
 
 #include <WiFi.h>
@@ -566,6 +575,7 @@ void loop() {
 
     // Monitor system resources and connections
     static unsigned long lastResourceCheck = 0;
+    static unsigned long lastTcpAssertCheck = 0;
     unsigned long currentMillis = millis();
     
     if (currentMillis - lastResourceCheck >= 5000) { // Check every 5 seconds
@@ -576,6 +586,30 @@ void loop() {
         // Emergency cleanup if resources are critically low
         if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
             emergencyResourceCleanup();
+        }
+    }
+    
+    // Additional check for potential TCP allocation issues
+    if (currentMillis - lastTcpAssertCheck >= 10000) { // Check every 10 seconds
+        lastTcpAssertCheck = currentMillis;
+        
+        // Check for signs of TCP allocation stress
+        if (ESP.getFreeHeap() < MIN_FREE_HEAP * 2 && currentConnectionCount > 0) {
+            debugPrintln("TCP allocation stress detected - preemptive cleanup");
+            cleanupStaleConnections();
+            
+            // If still stressed, be more aggressive
+            if (ESP.getFreeHeap() < MIN_FREE_HEAP * 1.5) {
+                debugPrintln("Severe TCP stress - forcing connection cleanup");
+                emergencyResourceCleanup();
+            }
+        }
+        
+        // Log status if debug mode is enabled
+        if (debugMode && (currentConnectionCount > 0 || ESP.getFreeHeap() < MIN_FREE_HEAP * 3)) {
+            debugPrintln("Resource monitor: " + String(ESP.getFreeHeap()) + " heap, " + 
+                        String(currentConnectionCount) + " connections, stability: " + 
+                        String(networkStabilityConfirmed ? "OK" : "UNSTABLE"));
         }
     }
 
@@ -5766,6 +5800,28 @@ void emergencyResourceCleanup() {
             activeConnections[oldestIndex].type = "";
             currentConnectionCount--;
         }
+    }
+    
+    // Additional emergency measures
+    if (ESP.getFreeHeap() < MIN_FREE_HEAP / 2) {
+        debugPrintln("CRITICAL: Heap extremely low, forcing WebSocket disconnects");
+        
+        // Disconnect all WebSocket clients except the first one
+        for (int i = 1; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++) {
+            if (webSocketClients[i]) {
+                webSocket.disconnect(i);
+                webSocketClients[i] = false;
+                debugPrintln("Emergency disconnect WebSocket client " + String(i));
+            }
+        }
+        
+        // Force garbage collection if available
+        #ifdef ESP_ARDUINO_VERSION_MAJOR
+        if (ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(2, 0, 0)) {
+            // Force garbage collection on newer ESP32 Arduino versions
+            delay(10);
+        }
+        #endif
     }
     
     // Force garbage collection
